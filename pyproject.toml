@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nuki-sesami"
+version = "0.0.1"
+authors = [
+    { name = "Michel Mooij", email = "michel.mooij7@gmail.com" }
+]
+description = "Open an electric door using Nuki smartlock status"
+readme = "README.md"
+dependencies = [
+    "paho-mqtt>=1.6.1",
+    "gpiozero>=1.6.2"
+]
+requires-python = ">= 3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/michelm/nuki-sesami"
