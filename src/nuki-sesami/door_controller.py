@@ -3,20 +3,24 @@
 import argparse
 import paho.mqtt.client as mqtt
 
+
 def on_connect(client, userdata, flags, rc):
     '''The callback for when the client receives a CONNACK response from the server.
 
     Allways subscribes to topics ensuring subscriptions will be renwed on reconnect.
     '''
+    # TODO: add proper error handling
     print(f"Connected with result code {rc}")
 
     # TODO: define/add actual topic(s)
     client.subscribe("$SYS/#")
 
+
 def on_message(client, userdata, msg):
     '''The callback for when a PUBLISH message is received from the server.
     '''
     print(f"{msg.topic} {msg.payload}")
+    # TODO: get door status from topic, trigger open relay when needed
 
 
 class DoorController():
@@ -31,11 +35,11 @@ class DoorController():
         self.client = mqtt.Client()
         self.client.on_connect = on_connect
         self.client.on_message = on_message
+        self.client.user_data_set(self) # pass instance of doorcontroller
 
-    def activate(self, username: str or None = None, password: str or None = None):
+    def activate(self, username: str or None, password: str or None):
         if username and password:
-            # TODO: set user credentials
-            pass
+            self.client.username_pw_set(username, password)
         self.client.connect(self.host, self.port, 60)
         self.client.loop_forever()
 
@@ -48,34 +52,26 @@ def main():
     )
     parser.add_argument('host', help="hostname or IP address of the mqtt broker, e.g. 'mqtt' or 'mqtt.local'")
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
-    parser.add_argument('-u', '--username', help="mqtt authentication username", default=None, type=str)
+    parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
     parser.add_argument('-P', '--password', help="mqtt authentication secret", default=None, type=str)
+    parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
-    host = args.host
-    port = args.port
-    username = args.username
-    password = args.password
 
-    print(f"host : {host}")
-    print(f"port : {port}")
-    print(f"username : {username}")
-    print(f"password : {password}")
+    if args.verbose:
+        print(f"host     : {args.host}")
+        print(f"port     : {args.port}")
+        print(f"username : {args.username}")
+        print(f"password : ***")
 
-
-def dummy():
-    host = "mqtt.local"
-    port = 1883
-    username = None
-    password = None
-    door = DoorController(host, port)
+    door = DoorController(args.host, args.port)
 
     try:
-        door.activate(username, password)
+        door.activate(args.username, args.password)
     except KeyboardInterrupt:
         print("Program terminated")
-    else:
-        print("Something went wrong")
+    except Exception as e:
+        print(f"Something went wrong: {e}")
 
 
 if __name__ == "__main__":
