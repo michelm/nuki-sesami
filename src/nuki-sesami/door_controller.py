@@ -24,19 +24,19 @@ def on_connect(client, userdata, flags, rc):
 
     Allways subscribes to topics ensuring subscriptions will be renwed on reconnect.
     '''
-    if rc == mqtt.CONNACK_ACCEPTED or rc == mqtt.CONNACK_REFUSED_PROTOCOL_VERSION:
-        print(f"{client.client_id} connected, code={rc}, flags={flags}")
+    if rc == mqtt.CONNACK_ACCEPTED:
+        print(f"[mqtt] connected; code={rc}, flags={flags}")
     else:
-        print(f"{client.client_id} connect failed; code={rc}, flags={flags}")
+        print(f"[mqtt] connect failed; code={rc}, flags={flags}")
     door = userdata
-    client.subscribe(f"nuki/{door.nuki_device}/state")
+    client.subscribe(f"nuki/{door.nuki_device_id}/state")
 
 
 def on_message(client, userdata, msg):
     '''The callback for when a PUBLISH message of Nuki door state is received from the server.
     '''
-    print(f"{client.client_id} topic={msg.topic}, payload={msg.payload}, type={type(msg.payload)}")
-    nuki_state = NukiDoorState(msg.payload)
+    print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}")
+    nuki_state = NukiDoorState(int(msg.payload))
     door = userdata
 
     if nuki_state == NukiDoorState.unlatched and door.nuki_state == NukiDoorState.unlatching:
@@ -56,7 +56,7 @@ class DoorController():
         self.nuki_state = NukiDoorState.undefined
         self.mqtt_host = mqtt_host
         self.mqtt_port = mqtt_port
-        self.client = mqtt.Client(client_id="nuki-sesami")
+        self.client = mqtt.Client()
         self.client.on_connect = on_connect
         self.client.on_message = on_message
         self.client.user_data_set(self) # pass instance of doorcontroller
@@ -68,7 +68,7 @@ class DoorController():
         self.client.loop_forever()
 
     def open(self):
-        print(f"opening door")
+        print(f"[relay] opening door")
         # TODO: trigger door open relay
         pass
 
@@ -79,7 +79,7 @@ def main():
         description='Opens an electric door when a Nuki 3.0 pro smart lock has been opened',
         epilog='Belrog: you shall not pass!'
     )
-    parser.add_argument('device', help="nuki hexadecimal device id, e.g. 1234ABCD", type=str)
+    parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
     parser.add_argument('-H', '--host', help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
