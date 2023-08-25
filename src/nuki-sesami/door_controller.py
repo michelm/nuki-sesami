@@ -38,7 +38,7 @@ def mqtt_on_message(client, userdata, msg):
     '''
     print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}")
     door = userdata
-    door.process_nuki_state(NukiLockState(int(msg.payload)))
+    door.process_lock_state(NukiLockState(int(msg.payload)))
 
 
 class Relay(LED):
@@ -55,10 +55,10 @@ class PushButton(Button):
 def request_door_open(button):
     print(f"[input] Door open push button {button.pin} is pressed")
     door = button.userdata
-    door.request_open()
+    door.open()
 
 
-class DoorController():
+class ElectricDoor():
     '''Opens an electric door based on the Nuki smart lock state
 
     Subscribes as client to MQTT door status topic from 'Nuki 3.0 pro' smart lock. When the lock has been opened
@@ -72,7 +72,7 @@ class DoorController():
         self.mqtt = mqtt.Client()
         self.mqtt.on_connect = mqtt_on_connect
         self.mqtt.on_message = mqtt_on_message
-        self.mqtt.user_data_set(self) # pass instance of doorcontroller
+        self.mqtt.user_data_set(self) # pass instance of electricdoor
         self.button = PushButton(pushbutton, self)
         self.button.when_pressed = request_door_open
         self.relay = Relay(dooropen)
@@ -84,13 +84,13 @@ class DoorController():
         self.mqtt.connect(self.mqtt_host, self.mqtt_port, 60)
         self.mqtt.loop_forever()
 
-    def process_nuki_state(self, nuki_state: NukiLockState):
+    def process_lock_state(self, nuki_state: NukiLockState):
         if nuki_state == NukiLockState.unlatched and self.nuki_state == NukiLockState.unlatching:
             print(f"[relay] opening door")
             self.relay.blink(on_time=1, off_time=1, n=1, background=True)
         self.nuki_state = nuki_state
 
-    def request_open(self):
+    def open(self):
         if self.nuki_state != NukiLockState.unlatched and self.nuki_state != NukiLockState.unlatching:
             print(f"[mqtt] request lock unlatched")
             self.mqtt.publish(f"nuki/{self.nuki_device_id}/lockAction", int(NukiLockState.unlatched))
@@ -122,7 +122,7 @@ def main():
         print(f"opendoor    : ${args.opendoor}")
         print(f"pushbutton  : ${args.pushbutton}")
 
-    door = DoorController(args.device, args.host, args.port, args.dooropen, args.pushbutton)
+    door = ElectricDoor(args.device, args.host, args.port, args.dooropen, args.pushbutton)
 
     try:
         door.activate(args.username, args.password)
