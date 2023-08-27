@@ -106,7 +106,7 @@ class ElectricDoor():
         self._nuki_state = nuki_state
 
     def open(self):
-        if self._nuki_state not in [NukiLockState.unlatched, NukiLockState.unlatching]:
+        if self._nuki_state == NukiLockState.locked: # TODO: check door is closed using door sensor?
             print(f"[mqtt] request lock unlatched")
             self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(NukiLockState.unlatched))
         elif self._nuki_state == NukiLockState.unlatching and not self.openhold:
