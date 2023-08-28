@@ -36,9 +36,13 @@ def mqtt_on_connect(client, userdata, flags, rc):
 def mqtt_on_message(client, userdata, msg):
     '''The callback for when a PUBLISH message of Nuki smart lock state is received.
     '''
-    print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}")
-    door = userdata
-    door.process_lock_state(NukiLockState(int(msg.payload)))
+    try:
+        state = NukiLockState(int(msg.payload))
+        print(f"[mqtt] topic={msg.topic}, nuki_state={state.name}:{state}")
+        door = userdata
+        door.process_lock_state(state)
+    except Exception as e:
+        print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}, exception={e}")
 
 
 class Relay(LED):
