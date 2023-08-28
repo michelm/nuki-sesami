@@ -30,7 +30,7 @@ def mqtt_on_connect(client, userdata, flags, rc):
     else:
         print(f"[mqtt] connect failed; code={rc}, flags={flags}")
     door = userdata
-    client.subscribe(f"nuki/{door.nuki_device_id}/state")
+    client.subscribe(f"nuki/{door._nuki_device_id}/state")
 
 
 def mqtt_on_message(client, userdata, msg):
