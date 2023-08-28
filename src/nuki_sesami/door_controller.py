@@ -80,9 +80,9 @@ class ElectricDoor():
         self._mqtt.user_data_set(self) # pass instance of electricdoor
         self._pushbutton = PushButton(pushbutton_pin, self)
         self._pushbutton.when_pressed = pushbutton_pressed
-        self._opendoor = Relay(opendoor_pin) # uses normally open relay
-        self._openhold_mode = Relay(openhold_mode_pin) # uses normally open relay
-        self._openclose_mode = Relay(openclose_mode_pin) # uses normally open relay
+        self._opendoor = Relay(opendoor_pin) # uses normally open relay (NO)
+        self._openhold_mode = Relay(openhold_mode_pin) # uses normally open relay (NO)
+        self._openclose_mode = Relay(openclose_mode_pin) # uses normally closed relay (NC)
         self._openhold = False
 
     @property
@@ -92,7 +92,7 @@ class ElectricDoor():
     def activate(self, host: str, port: int, username: str or None, password: str or None):
         self._opendoor.off()
         self._openhold_mode.off()
-        self._openclose_mode.on()
+        self._openclose_mode.off()
 
         if username and password:
             self._mqtt.username_pw_set(username, password)
@@ -103,14 +103,16 @@ class ElectricDoor():
         if nuki_state == NukiLockState.unlatched and self._nuki_state == NukiLockState.unlatching:
             if self.openhold:
                 self._openhold_mode.on()
-                self._openclose_mode.off()
+                self._openclose_mode.on()
             else:
                 print(f"[relay] opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
+        if nuki_state == NukiLockState.locked and self._nuki_state == NukiLockState.locking:
+            self.close()
         self._nuki_state = nuki_state
 
     def open(self):
-        if self._nuki_state in [NukiLockState.locked, NukiLockState.unlocked]: # TODO: check door is closed using door sensor?
+        if self._nuki_state in [NukiLockState.locked, NukiLockState.unlocked]: # TODO: check if door is closed using door sensor?
             print(f"[mqtt] request lock unlatched")
             self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(NukiLockState.unlatched))
         elif self._nuki_state == NukiLockState.unlatching and not self.openhold:
@@ -120,7 +122,7 @@ class ElectricDoor():
             print(f"[mode] open and hold")
             self._openhold = True
             self._openhold_mode.on()
-            self._openclose_mode.off()
+            self._openclose_mode.on()
         else:
             print(f"[open] request ignored; nuki_state={self._nuki_state.name}:{self._nuki_state}, openhold={self.openhold}")
 
@@ -128,7 +130,7 @@ class ElectricDoor():
         if self.openhold:
             print(f"[mode] open/close")
             self._openhold_mode.off()
-            self._openclose_mode.on()
+            self._openclose_mode.off()
         self._openhold = False
 
 
@@ -144,9 +146,9 @@ def main():
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
     parser.add_argument('-P', '--password', help="mqtt authentication secret", default=None, type=str)
     parser.add_argument('-1', '--pushbutton', help="pushbutton door/hold open request (gpio)pin", default=2, type=int)
-    parser.add_argument('-2', '--opendoor', help="door open relay (gpio)pin", default=26, type=int)
-    parser.add_argument('-3', '--openhold_mode', help="door open and hold mode relay (gpio)pin", default=20, type=int)
-    parser.add_argument('-4', '--openclose_mode', help="door open/close mode relay (gpio)pin", default=21, type=int)
+    parser.add_argument('-2', '--opendoor', help="door open NO relay (gpio)pin", default=26, type=int)
+    parser.add_argument('-3', '--openhold_mode', help="door open and hold mode NO relay (gpio)pin", default=20, type=int)
+    parser.add_argument('-4', '--openclose_mode', help="door open/close mode NC relay (gpio)pin", default=21, type=int)
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
