@@ -117,6 +117,8 @@ class ElectricDoor():
             self._openhold = True
             self._openhold_mode.on()
             self._openclose_mode.off()
+        else:
+            print(f"[open] request ignored; state={self._nuki_state}, openhold={self.openhold}")
 
     def close(self):
         if self.openhold:
