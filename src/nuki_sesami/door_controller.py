@@ -3,7 +3,7 @@
 from enum import IntEnum
 import argparse
 import paho.mqtt.client as mqtt
-from gpiozero import Button, LED
+from gpiozero import Button, DigitalOutputDevice
 
 
 class NukiLockState(IntEnum):
@@ -45,9 +45,14 @@ def mqtt_on_message(client, userdata, msg):
         print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}, exception={e}")
 
 
-class Relay(LED):
+class Relay(DigitalOutputDevice):
     def __init__(self, pin, *args, **kwargs):
         super(Relay, self).__init__(pin, active_high=False, *args, **kwargs)
+
+
+class Relay2(DigitalOutputDevice):
+    def __init__(self, pin, *args, **kwargs):
+        super(Relay2, self).__init__(pin, active_high=True, *args, **kwargs)
 
 
 class PushButton(Button):
@@ -81,8 +86,8 @@ class ElectricDoor():
         self._pushbutton = PushButton(pushbutton_pin, self)
         self._pushbutton.when_pressed = pushbutton_pressed
         self._opendoor = Relay(opendoor_pin) # uses normally open relay (NO)
-        self._openhold_mode = Relay(openhold_mode_pin) # uses normally open relay (NO)
-        self._openclose_mode = Relay(openclose_mode_pin) # uses normally open relay (NO)
+        self._openhold_mode = Relay2(openhold_mode_pin) # uses normally open relay (NO)
+        self._openclose_mode = Relay2(openclose_mode_pin) # uses normally open relay (NO)
         self._openhold = False
 
     @property
