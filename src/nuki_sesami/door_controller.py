@@ -50,11 +50,6 @@ class Relay(DigitalOutputDevice):
         super(Relay, self).__init__(pin, active_high=False, *args, **kwargs)
 
 
-class Relay2(DigitalOutputDevice):
-    def __init__(self, pin, *args, **kwargs):
-        super(Relay2, self).__init__(pin, active_high=True, *args, **kwargs)
-
-
 class PushButton(Button):
     def __init__(self, pin, userdata, *args, **kwargs):
         super(PushButton, self).__init__(pin, *args, **kwargs)
@@ -86,8 +81,8 @@ class ElectricDoor():
         self._pushbutton = PushButton(pushbutton_pin, self)
         self._pushbutton.when_pressed = pushbutton_pressed
         self._opendoor = Relay(opendoor_pin) # uses normally open relay (NO)
-        self._openhold_mode = Relay2(openhold_mode_pin) # uses normally open relay (NO)
-        self._openclose_mode = Relay2(openclose_mode_pin) # uses normally open relay (NO)
+        self._openhold_mode = Relay(openhold_mode_pin) # uses normally open relay (NO)
+        self._openclose_mode = Relay(openclose_mode_pin) # uses normally open relay (NO)
         self._openhold = False
 
     @property
