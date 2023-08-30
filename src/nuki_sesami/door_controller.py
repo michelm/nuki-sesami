@@ -137,7 +137,7 @@ class ElectricDoor():
 def main():
     parser = argparse.ArgumentParser(
         prog='nuki-sesami',
-        description='Opens an electric door when a Nuki 3.0 pro smart lock has been opened',
+        description='Open and close an electric door equipped with a Nuki 3.0 pro smart lock',
         epilog='Belrog: you shall not pass!',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
