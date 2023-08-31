@@ -22,8 +22,9 @@ classifiers = [
 ]
 
 [project.scripts]
-nuki-sesami = "nuki_sesami/door_controller:main"
-nuki-sesami-systemd = "nuki_sesami/sesami_systemd:main"
+nuki-sesami = "nuki_sesami.door_controller:main"
+nuki-sesami-systemd = "nuki_sesami.sesami_systemd:main"
 
 [project.urls]
 "Homepage" = "https://github.com/michelm/nuki-sesami"
+
