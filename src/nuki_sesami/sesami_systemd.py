@@ -38,6 +38,7 @@ def nuki_sesami_systemd(device: str, host: str, username: str, password: str, re
         f.write(SYSTEMD_TEMPLATE % (bin, device, host, username, password))
 
     try:
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", "nuki-sesami.service"], check=True)
         subprocess.run(["systemctl", "start", "nuki-sesami.service"], check=True)
     except subprocess.CalledProcessError as e:
