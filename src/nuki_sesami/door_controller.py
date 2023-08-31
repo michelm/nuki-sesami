@@ -134,7 +134,7 @@ class ElectricDoor():
         self.mode(openhold=False)
 
     def on_lock_state_changed(self, lock: NukiLockState):
-        print(f"[process_lock_state] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
+        print(f"[lock_state_changed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
         if lock == NukiLockState.unlatched and self.lock == NukiLockState.unlatching:
             if self.openhold:
                 self.mode(openhold=True)
@@ -147,7 +147,7 @@ class ElectricDoor():
 
     def on_pushbutton_pressed(self):
         self._state = next_door_state(self._state)
-        print(f"[pushbutton] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        print(f"[pushbutton_pressed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
         if self.state == DoorState.openclose1:
             self.close()
         elif self.state == DoorState.openclose2:
