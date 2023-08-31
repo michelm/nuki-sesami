@@ -141,6 +141,8 @@ class ElectricDoor():
             else:
                 print(f"[relay] opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
+        elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
+            self._state = DoorState.openclose1
         self.lock = lock
 
     def on_pushbutton_pressed(self):
