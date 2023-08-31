@@ -37,7 +37,7 @@ Use the same credentials as above for the nuki user.
 Activate **nuki-sesami** as systemd service:
 
 ```bash
-nuki-sesami-setup --install-systemd --user=sesami --password=<secret2>
+sudo nuki-sesami-systemd <nuki-device-id> -H <mqtt-broker-hostname> -U sesami -P <secret2>
 ```
 
 In the _BATS_ programming menu of the ERREKA door controller ensure the external switch for manual changing the operating mode
