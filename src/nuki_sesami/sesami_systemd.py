@@ -13,6 +13,7 @@ Wants=Network.target
 
 [Service]
 Type=simple
+User=%s
 Restart=always
 RestartSec=1
 ExecStart=%s %s -H %s -U %s -P %s
@@ -22,7 +23,7 @@ WantedBy=multi-user.target
 '''
 
 
-def nuki_sesami_systemd(device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
+def nuki_sesami_systemd(user: str, device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
     if not remove:
         subprocess.run(["systemctl", "stop", "nuki-sesami.service"])
         subprocess.run(["systemctl", "disable", "nuki-sesami.service"])
@@ -35,7 +36,7 @@ def nuki_sesami_systemd(device: str, host: str, username: str, password: str, re
         sys.exit(1)
 
     with open(f'/lib/systemd/system/nuki-sesami.service', 'w+') as f:
-        f.write(SYSTEMD_TEMPLATE % (bin, device, host, username, password))
+        f.write(SYSTEMD_TEMPLATE % (user, bin, device, host, username, password))
 
     try:
         subprocess.run(["systemctl", "daemon-reload"], check=True)
@@ -54,6 +55,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
+    parser.add_argument('user', help="user in the systemd service", type=str)
     parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
     parser.add_argument('-H', '--host', help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
@@ -64,6 +66,7 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
+        print(f"user        : {args.user}")
         print(f"device      : {args.device}")
         print(f"host        : {args.host}")
         print(f"username    : {args.username}")
@@ -71,7 +74,7 @@ def main():
         print(f"remove      : {args.remove}")
 
     try:
-        nuki_sesami_systemd(args.device, args.host, args.username, args.password, args.remove)
+        nuki_sesami_systemd(args.user, args.device, args.host, args.username, args.password, args.remove)
     except KeyboardInterrupt:
         print("Program terminated")
     except Exception as e:
