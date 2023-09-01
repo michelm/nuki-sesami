@@ -17,6 +17,9 @@ User=%s
 Restart=always
 RestartSec=1
 ExecStart=%s %s -H %s -U %s -P %s
+StandardError=journal
+StandardOutput=journal
+StandardInput=null
 
 [Install]
 WantedBy=multi-user.target
