@@ -27,10 +27,10 @@ WantedBy=multi-user.target
 
 
 def nuki_sesami_systemd(user: str, device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
-    if not remove:
-        subprocess.run(["systemctl", "stop", "nuki-sesami.service"])
-        subprocess.run(["systemctl", "disable", "nuki-sesami.service"])
-        subprocess.run(["rm", "-rf", "/lib/systemd/system/nuki-sesami.service"])
+    if remove:
+        subprocess.run(["systemctl", "stop", "nuki-sesami"])
+        subprocess.run(["systemctl", "disable", "nuki-sesami"])
+        subprocess.run(["rm", "-vrf", "/lib/systemd/system/nuki-sesami.service"])
         return
 
     bin = shutil.which('nuki-sesami')
@@ -38,13 +38,15 @@ def nuki_sesami_systemd(user: str, device: str, host: str, username: str, passwo
         print(f"Failed to detect 'nuki-sesami' binary")
         sys.exit(1)
 
-    with open(f'/lib/systemd/system/nuki-sesami.service', 'w+') as f:
+    fname = f'/lib/systemd/system/nuki-sesami.service'
+    with open(fname, 'w+') as f:
         f.write(SYSTEMD_TEMPLATE % (user, bin, device, host, username, password))
+        print(f"Created systemd file; '{fname}'")
 
     try:
         subprocess.run(["systemctl", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "enable", "nuki-sesami.service"], check=True)
-        subprocess.run(["systemctl", "start", "nuki-sesami.service"], check=True)
+        subprocess.run(["systemctl", "enable", "nuki-sesami"], check=True)
+        subprocess.run(["systemctl", "start", "nuki-sesami"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Something went wrong: {e}")
         sys.exit(1)
