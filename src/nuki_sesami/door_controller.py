@@ -4,7 +4,7 @@ from enum import IntEnum
 import argparse
 import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
-from door_state import DoorState, next_door_state
+from nuki_sesami.door_state import DoorState, next_door_state
 
 
 class NukiLockState(IntEnum):
