@@ -48,7 +48,7 @@ is activated:
 
 Use wiring connection as depicted in the diagram below:
 
-![nuki-sesami-wiring](nuki-raspi-door-erreka.png)
+![nuki-sesami-wiring](https://raw.githubusercontent.com/michelm/nuki-sesami/master/nuki-raspi-door-erreka.png)
 
 ## Usage
 
