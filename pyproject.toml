@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuki-sesami"
-version = "0.0.4"
+version = "0.1.0"
 authors = [
     { name = "Michel Mooij", email = "michel.mooij7@gmail.com" }
 ]
@@ -22,7 +22,9 @@ classifiers = [
 ]
 
 [project.scripts]
-nuki-sesami = "nuki_sesami/door_controller:main"
+nuki-sesami = "nuki_sesami.door_controller:main"
+nuki-sesami-systemd = "nuki_sesami.sesami_systemd:main"
 
 [project.urls]
 "Homepage" = "https://github.com/michelm/nuki-sesami"
+

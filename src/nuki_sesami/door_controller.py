@@ -4,6 +4,7 @@ from enum import IntEnum
 import argparse
 import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
+from nuki_sesami.door_state import DoorState, next_door_state
 
 
 class NukiLockState(IntEnum):
@@ -37,10 +38,10 @@ def mqtt_on_message(client, userdata, msg):
     '''The callback for when a PUBLISH message of Nuki smart lock state is received.
     '''
     try:
-        state = NukiLockState(int(msg.payload))
-        print(f"[mqtt] topic={msg.topic}, nuki_state={state.name}:{state}")
+        lock = NukiLockState(int(msg.payload))
+        print(f"[mqtt] topic={msg.topic}, lock={lock.name}:{lock}")
         door = userdata
-        door.process_lock_state(state)
+        door.on_lock_state_changed(lock)
     except Exception as e:
         print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}, exception={e}")
 
@@ -59,10 +60,7 @@ class PushButton(Button):
 def pushbutton_pressed(button):
     print(f"[input] Door (open/hold/close) push button {button.pin} is pressed")
     door = button.userdata
-    if door.openhold:
-        door.close()
-    else:
-        door.open()
+    door.on_pushbutton_pressed()
 
 
 class ElectricDoor():
@@ -83,55 +81,79 @@ class ElectricDoor():
         self._opendoor = Relay(opendoor_pin) # uses normally open relay (NO)
         self._openhold_mode = Relay(openhold_mode_pin) # uses normally open relay (NO)
         self._openclose_mode = Relay(openclose_mode_pin) # uses normally open relay (NO)
-        self._openhold = False
-
-    @property
-    def openhold(self):
-        return self._openhold
+        self._state = DoorState.openclose1
 
     def activate(self, host: str, port: int, username: str or None, password: str or None):
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
-
         if username and password:
             self._mqtt.username_pw_set(username, password)
         self._mqtt.connect(host, port, 60)
         self._mqtt.loop_forever()
 
-    def process_lock_state(self, nuki_state: NukiLockState):
-        if nuki_state == NukiLockState.unlatched and self._nuki_state == NukiLockState.unlatching:
-            if self.openhold:
-                self._openhold_mode.on()
-                self._openclose_mode.off()
-            else:
-                print(f"[relay] opening door")
-                self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        if nuki_state == NukiLockState.locked and self._nuki_state == NukiLockState.locking:
-            self.close()
-        self._nuki_state = nuki_state
+    @property
+    def lock(self) -> NukiLockState:
+        return self._nuki_state
 
-    def open(self):
-        if self._nuki_state in [NukiLockState.locked, NukiLockState.unlocked]: # TODO: check if door is closed using door sensor?
-            print(f"[mqtt] request lock unlatched")
-            self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(NukiLockState.unlatched))
-        elif self._nuki_state == NukiLockState.unlatching and not self.openhold:
+    @lock.setter
+    def lock(self, state: NukiLockState):
+        self._nuki_state = state
+
+    @property
+    def openhold(self) -> bool:
+        return self._state == DoorState.openhold
+
+    @property
+    def state(self) -> DoorState:
+        return self._state
+
+    def mode(self, openhold: bool):
+        if openhold:
             print(f"[mode] open and hold")
-            self._openhold = True
-        elif self._nuki_state == NukiLockState.unlatched and not self.openhold:
-            print(f"[mode] open and hold")
-            self._openhold = True
             self._openhold_mode.on()
             self._openclose_mode.off()
         else:
-            print(f"[open] request ignored; nuki_state={self._nuki_state.name}:{self._nuki_state}, openhold={self.openhold}")
-
-    def close(self):
-        if self.openhold:
             print(f"[mode] open/close")
             self._openhold_mode.off()
             self._openclose_mode.on()
-        self._openhold = False
+
+    def lock_action(self, action: NukiLockState):
+        print(f"[mqtt] request lock={action.name}:{action}")
+        self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(action))
+
+    def open(self):
+        print(f"[open] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching]:
+            self.lock_action(NukiLockState.unlatched)
+
+    def close(self):
+        print(f"[close] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked, NukiLockState.unlocked2]:
+            self.lock_action(NukiLockState.unlocked)
+        self.mode(openhold=False)
+
+    def on_lock_state_changed(self, lock: NukiLockState):
+        print(f"[lock_state_changed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
+        if lock == NukiLockState.unlatched and self.lock == NukiLockState.unlatching:
+            if self.openhold:
+                self.mode(openhold=True)
+            else:
+                print(f"[relay] opening door")
+                self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
+        elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
+            self._state = DoorState.openclose1
+        self.lock = lock
+
+    def on_pushbutton_pressed(self):
+        self._state = next_door_state(self._state)
+        print(f"[pushbutton_pressed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        if self.state == DoorState.openclose1:
+            self.close()
+        elif self.state == DoorState.openclose2:
+            self.open()
+        elif self.state == DoorState.openhold:
+            pass # no action here
 
 
 def main():
