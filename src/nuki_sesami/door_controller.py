@@ -26,6 +26,17 @@ class NukiLockState(IntEnum):
     undefined       = 255
 
 
+class NukiLockAction(IntEnum):
+    unlock          = 1 # activate rto
+    lock            = 2 # deactivate rto
+    unlatch         = 3 # electric strike actuation
+    lock_and_go1    = 4 # lock ‘n’ go; activate continuous mode
+    lock_and_go2    = 5 # lock ‘n’ go with unlatch deactivate continuous mode
+    full_lock       = 6
+    fob             = 80 # (without action) fob (without action)
+    button          = 90 # (without action) button (without action)
+
+
 def mqtt_on_connect(client, userdata, flags, rc):
     '''The callback for when the client receives a CONNACK response from the server.
 
@@ -128,19 +139,19 @@ class ElectricDoor():
             self._openhold_mode.off()
             self._openclose_mode.on()
 
-    def lock_action(self, action: NukiLockState):
+    def lock_action(self, action: NukiLockAction):
         self.logger.info(f"(lock) request action={action.name}:{action}")
         self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(action))
 
     def open(self):
         self.logger.info(f"(open) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
         if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching]:
-            self.lock_action(NukiLockState.unlatched)
+            self.lock_action(NukiLockAction.unlatch)
 
     def close(self):
         self.logger.info(f"(close) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
-        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked, NukiLockState.unlocked2]:
-            self.lock_action(NukiLockState.unlocked)
+        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked]:
+            self.lock_action(NukiLockAction.unlock)
         self.mode(openhold=False)
 
     def on_lock_state_changed(self, lock: NukiLockState):
@@ -151,9 +162,7 @@ class ElectricDoor():
             else:
                 self.logger.info(f"(relay) opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        elif self.lock == NukiLockState.unlatched and lock == NukiLockState.unlocked2:
-            self.lock_action(NukiLockState.unlocked)
-        if lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
+        elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
             self._state = DoorState.openclose1
         self.lock = lock
 
