@@ -1,6 +1,11 @@
 #!/bin/env python3
 
 from enum import IntEnum
+import os
+import sys
+import logging
+from logging import Logger
+from logging.handlers import RotatingFileHandler
 import argparse
 import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
@@ -26,24 +31,24 @@ def mqtt_on_connect(client, userdata, flags, rc):
 
     Allways subscribes to topics ensuring subscriptions will be renwed on reconnect.
     '''
-    if rc == mqtt.CONNACK_ACCEPTED:
-        print(f"[mqtt] connected; code={rc}, flags={flags}")
-    else:
-        print(f"[mqtt] connect failed; code={rc}, flags={flags}")
     door = userdata
+    if rc == mqtt.CONNACK_ACCEPTED:
+        door.logger.info(f"(mqtt) connected; code={rc}, flags={flags}")
+    else:
+        door.logger.error(f"(mqtt) connect failed; code={rc}, flags={flags}")
     client.subscribe(f"nuki/{door._nuki_device_id}/state")
 
 
 def mqtt_on_message(client, userdata, msg):
     '''The callback for when a PUBLISH message of Nuki smart lock state is received.
     '''
+    door = userdata    
     try:
         lock = NukiLockState(int(msg.payload))
-        print(f"[mqtt] topic={msg.topic}, lock={lock.name}:{lock}")
-        door = userdata
+        door.logger.info(f"(mqtt) topic={msg.topic}, lock={lock.name}:{lock}")
         door.on_lock_state_changed(lock)
     except Exception as e:
-        print(f"[mqtt] topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}, exception={e}")
+        door.logger.error(f"(mqtt) topic={msg.topic}, payload={msg.payload}, payload_type={type(msg.payload)}, payload_length={len(msg.payload)}, exception={e}")
 
 
 class Relay(DigitalOutputDevice):
@@ -58,8 +63,8 @@ class PushButton(Button):
 
 
 def pushbutton_pressed(button):
-    print(f"[input] Door (open/hold/close) push button {button.pin} is pressed")
     door = button.userdata
+    door.logger.info(f"(input) door (open/hold/close) push button {button.pin} is pressed")
     door.on_pushbutton_pressed()
 
 
@@ -69,7 +74,8 @@ class ElectricDoor():
     Subscribes as client to MQTT door status topic from 'Nuki 3.0 pro' smart lock. When the lock has been opened
     it will activate a relay, e.g. using the 'RPi Relay Board', triggering the electric door to open.
     '''
-    def __init__(self, nuki_device_id: str, pushbutton_pin: int, opendoor_pin: int, openhold_mode_pin: int, openclose_mode_pin: int):
+    def __init__(self, logger: Logger, nuki_device_id: str, pushbutton_pin: int, opendoor_pin: int, openhold_mode_pin: int, openclose_mode_pin: int):
+        self._logger = logger
         self._nuki_device_id = nuki_device_id
         self._nuki_state = NukiLockState.undefined
         self._mqtt = mqtt.Client()
@@ -108,38 +114,42 @@ class ElectricDoor():
     def state(self) -> DoorState:
         return self._state
 
+    @property
+    def logger(self) -> Logger:
+        return self._logger
+
     def mode(self, openhold: bool):
         if openhold:
-            print(f"[mode] open and hold")
+            self.logger.info(f"(mode) open and hold")
             self._openhold_mode.on()
             self._openclose_mode.off()
         else:
-            print(f"[mode] open/close")
+            self.logger.info(f"(mode) open/close")
             self._openhold_mode.off()
             self._openclose_mode.on()
 
     def lock_action(self, action: NukiLockState):
-        print(f"[mqtt] request lock={action.name}:{action}")
+        self.logger.info(f"(lock) request action={action.name}:{action}")
         self._mqtt.publish(f"nuki/{self._nuki_device_id}/lockAction", int(action))
 
     def open(self):
-        print(f"[open] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info(f"(open) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
         if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching]:
             self.lock_action(NukiLockState.unlatched)
 
     def close(self):
-        print(f"[close] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info(f"(close) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
         if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked, NukiLockState.unlocked2]:
             self.lock_action(NukiLockState.unlocked)
         self.mode(openhold=False)
 
     def on_lock_state_changed(self, lock: NukiLockState):
-        print(f"[lock_state_changed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
+        self.logger.info(f"(lock_state_changed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
         if lock == NukiLockState.unlatched and self.lock == NukiLockState.unlatching:
             if self.openhold:
                 self.mode(openhold=True)
             else:
-                print(f"[relay] opening door")
+                self.logger.info(f"(relay) opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
         elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
             self._state = DoorState.openclose1
@@ -147,13 +157,27 @@ class ElectricDoor():
 
     def on_pushbutton_pressed(self):
         self._state = next_door_state(self._state)
-        print(f"[pushbutton_pressed] state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info(f"(pushbutton_pressed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
         if self.state == DoorState.openclose1:
             self.close()
         elif self.state == DoorState.openclose2:
             self.open()
         elif self.state == DoorState.openhold:
             pass # no action here
+
+
+def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    logger.addHandler(handler)
+    handler = RotatingFileHandler(f'{os.path.join(path,name)}.log', maxBytes=1048576, backupCount=10)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    logger.addHandler(handler)
+    return logger
 
 
 def main():
@@ -176,25 +200,29 @@ def main():
 
     args = parser.parse_args()
 
-    if args.verbose:
-        print(f"device          : {args.device}")
-        print(f"host            : {args.host}")
-        print(f"port            : {args.port}")
-        print(f"username        : {args.username}")
-        print(f"password        : ***")
-        print(f"pushbutton      : ${args.pushbutton}")
-        print(f"opendoor        : ${args.opendoor}")
-        print(f"openhold_mode   : ${args.openhold_mode}")
-        print(f"openclose_mode  : ${args.openclose_mode}")
+    logpath = '/var/log/nuki-sesami'
+    if not os.path.exists(logpath):
+        os.makedirs(logpath)
 
-    door = ElectricDoor(args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
+    logger = getlogger('nuki-sesami', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
+    logger.debug(f"args.device={args.device}")
+    logger.debug(f"args.host={args.host}")
+    logger.debug(f"args.port={args.port}")
+    logger.debug(f"args.username={args.username}")
+    logger.debug(f"args.password=***")
+    logger.debug(f"args.pushbutton=${args.pushbutton}")
+    logger.debug(f"args.opendoor=${args.opendoor}")
+    logger.debug(f"args.openhold_mode=${args.openhold_mode}")
+    logger.debug(f"args.openclose_mode=${args.openclose_mode}")
+
+    door = ElectricDoor(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
 
     try:
         door.activate(args.host, args.port, args.username, args.password)
     except KeyboardInterrupt:
-        print("Program terminated")
+        logger.info("program terminated; keyboard interrupt")
     except Exception as e:
-        print(f"Something went wrong: {e}")
+        logger.error(f"something went wrong, exception; {e}")
 
 
 if __name__ == "__main__":
