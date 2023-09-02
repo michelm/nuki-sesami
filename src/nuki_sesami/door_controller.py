@@ -145,13 +145,15 @@ class ElectricDoor():
 
     def on_lock_state_changed(self, lock: NukiLockState):
         self.logger.info(f"(lock_state_changed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock} -> {lock.name}:{lock}")
-        if lock == NukiLockState.unlatched and self.lock == NukiLockState.unlatching:
+        if self.lock == NukiLockState.unlatching and lock == NukiLockState.unlatched:
             if self.openhold:
                 self.mode(openhold=True)
             else:
                 self.logger.info(f"(relay) opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
+        elif self.lock == NukiLockState.unlatched and lock == NukiLockState.unlocked2:
+            self.lock_action(NukiLockState.unlocked)
+        if lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
             self._state = DoorState.openclose1
         self.lock = lock
 
@@ -171,7 +173,7 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     logger.setLevel(level)
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
     logger.addHandler(handler)
     handler = RotatingFileHandler(f'{os.path.join(path,name)}.log', maxBytes=1048576, backupCount=10)
     handler.setLevel(level)

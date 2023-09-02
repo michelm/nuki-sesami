@@ -13,9 +13,9 @@ Wants=Network.target
 
 [Service]
 Type=simple
-User=%s
 Restart=always
 RestartSec=1
+Environment=PYTHONPATH=%s:$PYTHONPATH
 ExecStart=%s %s -H %s -U %s -P %s
 StandardError=journal
 StandardOutput=journal
@@ -26,7 +26,7 @@ WantedBy=multi-user.target
 '''
 
 
-def nuki_sesami_systemd(user: str, device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
+def nuki_sesami_systemd(device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
     if remove:
         subprocess.run(["systemctl", "stop", "nuki-sesami"])
         subprocess.run(["systemctl", "disable", "nuki-sesami"])
@@ -38,9 +38,11 @@ def nuki_sesami_systemd(user: str, device: str, host: str, username: str, passwo
         print(f"Failed to detect 'nuki-sesami' binary")
         sys.exit(1)
 
+    pythonpath = [x for x in sys.path if x.startswith('/home/')][0]
+
     fname = f'/lib/systemd/system/nuki-sesami.service'
     with open(fname, 'w+') as f:
-        f.write(SYSTEMD_TEMPLATE % (user, bin, device, host, username, password))
+        f.write(SYSTEMD_TEMPLATE % (pythonpath, bin, device, host, username, password))
         print(f"Created systemd file; '{fname}'")
 
     try:
@@ -60,7 +62,6 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    parser.add_argument('user', help="user in the systemd service", type=str)
     parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
     parser.add_argument('-H', '--host', help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
@@ -71,7 +72,6 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
-        print(f"user        : {args.user}")
         print(f"device      : {args.device}")
         print(f"host        : {args.host}")
         print(f"username    : {args.username}")
@@ -79,7 +79,7 @@ def main():
         print(f"remove      : {args.remove}")
 
     try:
-        nuki_sesami_systemd(args.user, args.device, args.host, args.username, args.password, args.remove)
+        nuki_sesami_systemd(args.device, args.host, args.username, args.password, args.remove)
     except KeyboardInterrupt:
         print("Program terminated")
     except Exception as e:
