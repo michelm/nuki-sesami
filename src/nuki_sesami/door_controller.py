@@ -37,6 +37,12 @@ class NukiLockAction(IntEnum):
     button          = 90 # (without action) button (without action)
 
 
+class PushbuttonLogic(IntEnum):
+    openhold    = 0
+    open        = 1
+    toggle      = 2 # toggle between 'open' and 'openhold' door modes
+
+
 def mqtt_on_connect(client, userdata, flags, rc):
     '''The callback for when the client receives a CONNACK response from the server.
 
@@ -177,6 +183,56 @@ class ElectricDoor():
             pass # no action here
 
 
+class ElectricDoorPushbuttonOpenHold(ElectricDoor):
+    '''Electric door with pushbutton 'open and hold' logic
+    
+    When pressing the pushbutton the door will be opened and held open until the pushbutton is pressed again.
+    '''
+    def __init__(self, *arg, **kwargs):
+        super(ElectricDoorPushbuttonOpenHold, self).__init__(*arg, **kwargs)
+
+    def on_pushbutton_pressed(self):
+        self._state = DoorState.openhold if self.state == DoorState.openclose1 else DoorState.openclose1
+        self.logger.info(f"(pushbutton_pressed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        if self.state == DoorState.openhold:
+            self.open()
+        else:
+            self.close()
+
+
+class ElectricDoorPushbuttonOpen(ElectricDoor):
+    '''Electric door with pushbutton open logic
+    
+    When pressing the pushbutton the door will be opened for a few seconds after which it will be closed again.
+    '''
+    def __init__(self, *arg, **kwargs):
+        super(ElectricDoorPushbuttonOpen, self).__init__(*arg, **kwargs)
+
+    def on_pushbutton_pressed(self):
+        self.logger.info(f"(pushbutton_pressed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.open()
+
+
+class ElectricDoorPushbuttonToggle(ElectricDoor):
+    '''Electric door with pushbutton toggle logic
+
+    When pressing the pushbutton the door will open, if during the smart lock unlatching phase of the pushbutton is pressed again
+    the door will be held open until the pushbutton is pressed again.
+    '''
+    def __init__(self, *arg, **kwargs):
+        super(ElectricDoorPushbuttonToggle, self).__init__(*arg, **kwargs)
+
+    def on_pushbutton_pressed(self):
+        self._state = next_door_state(self._state)
+        self.logger.info(f"(pushbutton_pressed) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        if self.state == DoorState.openclose1:
+            self.close()
+        elif self.state == DoorState.openclose2:
+            self.open()
+        elif self.state == DoorState.openhold:
+            pass # no action here
+
+
 def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -207,6 +263,7 @@ def main():
     parser.add_argument('-2', '--opendoor', help="door open relay (gpio)pin", default=26, type=int)
     parser.add_argument('-3', '--openhold_mode', help="door open and hold mode relay (gpio)pin", default=20, type=int)
     parser.add_argument('-4', '--openclose_mode', help="door open/close mode relay (gpio)pin", default=21, type=int)
+    parser.add_argument('-B', '--buttonlogic', help="pushbutton logic when pressed; 0=openhold,1=open,2=toggle", default=0, type=int)
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
@@ -225,8 +282,20 @@ def main():
     logger.debug(f"args.opendoor=${args.opendoor}")
     logger.debug(f"args.openhold_mode=${args.openhold_mode}")
     logger.debug(f"args.openclose_mode=${args.openclose_mode}")
+    logger.debug(f"args.buttonlogic=${args.buttonlogic}")
 
-    door = ElectricDoor(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
+    try:
+        buttonlogic = PushbuttonLogic(args.buttonlogic)
+    except ValueError:
+        logger.error(f"invalid (push)button logic; --buttonlogic={args.buttonlogic}")
+        sys.exit(1)
+
+    if buttonlogic == PushbuttonLogic.open:
+        door = ElectricDoorPushbuttonOpen(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
+    elif buttonlogic == PushbuttonLogic.toggle:
+        door = ElectricDoorPushbuttonToggle(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
+    else:
+        door = ElectricDoorPushbuttonOpenHold(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode, args.openclose_mode)
 
     try:
         door.activate(args.host, args.port, args.username, args.password)

@@ -57,10 +57,19 @@ and/or other _Nuki_ peripherals; like for instance the _Nuki Fob_.
 As soon as the smartlock state changes from _unlatching_ to _unlatched_ the electric door will be opened by means
 of the relay board using a short on/off puls on _Relay CH1_.
 
-The relay board can also be operated manually using the pushbutton. This is useful when the door needs to be opened without 
-the _Nuki_ app or _Nuki_ peripherals. When pressing pushbutton once the smartlock will be unlatched and the door will be opened.
-If during the opening phase the pushbutton is pressed again, the door will be kept open (_openhold mode_) until the pushbutton
-is pressed again.
+The relay board can also be operated manually using a pushbutton. This is useful when the door needs to be opened without
+the _Nuki_ app or _Nuki_ peripherals and/or change the door operating mode.
+The pushbutton logic can be as follows:
+
+- **pushbutton-openhold** When pressing the pushbutton once the smartlock will be unlatched and the door will be opened
+and held open (_openhold mode_) until the pushbutton is pressed again (**default** logic).
+
+- **pushbutton-open** When pressing the pushbutton once the smartlock will be unlatched and the door will be opened. After a
+few seconds the door will automaticaly be closed again.
+
+- **pushbutton-toggle** When pressing the pushbutton once the smartlock will be unlatched and the door will be opened. If during
+the opening phase the pushbutton is pressed again, the door will be kept open (_openhold mode_) until the pushbutton is pressed again.
+Otherwise the door will be closed again after a few seconds.
 
 Please note that when the system starts up, the door will be in _open/close_ mode; i.e. _Relay CH3_ will be active and _Relay CH2_
 will be inactive. This is to ensure the door can be opened and closed as per usual. When the system is in in _openhold_ mode 
