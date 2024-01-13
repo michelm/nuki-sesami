@@ -234,6 +234,17 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
 
 
 def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
+    '''Returns a logger instance for the given name and path.
+    
+    The logger for will rotating log files with a maximum size of 1MB and 
+    a maximum of 10 log files.
+
+    Parameters:
+    * name: name of the logger, e.g. 'nuki-sesami'
+    * path: complete path for storing the log files, e.g. '/var/log/nuki-sesami'
+    * level: logging level, e.g; logging.DEBUG
+
+    '''
     logger = logging.getLogger(name)
     logger.setLevel(level)
     handler = logging.StreamHandler(sys.stdout)
@@ -245,6 +256,11 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
     logger.addHandler(handler)
     return logger
+
+
+def is_virtual_env():
+    '''Returns true when running in a virtual environment.'''
+    return sys.prefix != sys.base_prefix
 
 
 def main():
@@ -268,8 +284,13 @@ def main():
 
     args = parser.parse_args()
 
-    logpath = '/var/log/nuki-sesami'
+    if is_virtual_env():    
+        logpath = os.path.join(sys.prefix, 'var/log/nuki-sesami')
+    else:
+        logpath = '/var/log/nuki-sesami'
+
     if not os.path.exists(logpath):
+        print(f"mkdir -p {logpath}")
         os.makedirs(logpath)
 
     logger = getlogger('nuki-sesami', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
