@@ -1,5 +1,6 @@
 #!/bin/env python3
 
+import os
 import sys
 import argparse
 import subprocess
@@ -15,7 +16,7 @@ Wants=Network.target
 Type=simple
 Restart=always
 RestartSec=1
-Environment=PYTHONPATH=%s:$PYTHONPATH
+Environment=%s
 ExecStart=%s %s -H %s -U %s -P %s
 StandardError=journal
 StandardOutput=journal
@@ -27,10 +28,12 @@ WantedBy=multi-user.target
 
 
 def nuki_sesami_systemd(device: str, host: str, username: str, password: str, remove: bool = False)  -> None:
+    systemd_fname = f'/lib/systemd/system/nuki-sesami.service'
+
     if remove:
         subprocess.run(["systemctl", "stop", "nuki-sesami"])
         subprocess.run(["systemctl", "disable", "nuki-sesami"])
-        subprocess.run(["rm", "-vrf", "/lib/systemd/system/nuki-sesami.service"])
+        subprocess.run(["rm", "-vrf", systemd_fname])
         return
 
     bin = shutil.which('nuki-sesami')
@@ -38,12 +41,14 @@ def nuki_sesami_systemd(device: str, host: str, username: str, password: str, re
         print(f"Failed to detect 'nuki-sesami' binary")
         sys.exit(1)
 
-    pythonpath = [x for x in sys.path if x.startswith('/home/')][0]
+    try:
+        env = 'PYTHONPATH=%s:$PYTHONPATH' % [x for x in sys.path if x.startswith('/home/')][0]
+    except:
+        env = ''
 
-    fname = f'/lib/systemd/system/nuki-sesami.service'
-    with open(fname, 'w+') as f:
-        f.write(SYSTEMD_TEMPLATE % (pythonpath, bin, device, host, username, password))
-        print(f"Created systemd file; '{fname}'")
+    with open(systemd_fname, 'w+') as f:
+        f.write(SYSTEMD_TEMPLATE % (env, bin, device, host, username, password))
+        print(f"Created systemd file; '{systemd_fname}'")
 
     try:
         subprocess.run(["systemctl", "daemon-reload"], check=True)
@@ -77,6 +82,10 @@ def main():
         print(f"username    : {args.username}")
         print(f"password    : ***")
         print(f"remove      : {args.remove}")
+
+    if 'VIRTUAL_ENV' in os.environ:
+        print("Virtual environment detected, systemd is not supported")
+        sys.exit(1)
 
     try:
         nuki_sesami_systemd(args.device, args.host, args.username, args.password, args.remove)
