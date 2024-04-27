@@ -6,6 +6,8 @@ import subprocess
 import sys
 from logging import Logger
 from logging.handlers import RotatingFileHandler
+from nuki_sesami.util import is_virtual_env, getlogger, exec
+
 
 SYSTEMD_TEMPLATE = '''[Unit]
 Description=Electric door controller using a Nuki 3.0 pro smart lock
@@ -29,63 +31,40 @@ WantedBy=multi-user.target
 
 def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, password: str,
                         remove: bool = False)  -> None:
-    systemd_fname = '/lib/systemd/system/nuki-sesami.service'
+    prefix = sys.prefix if is_virtual_env() else '/'
+    systemd_fname = os.path.join(prefix,  'lib/systemd/system/nuki-sesami.service')
+    systemctl = ["echo", "/usr/bin/systemctl"] if is_virtual_env() else ["systemctl"]
 
     if remove:
-        subprocess.run(["/usr/bin/systemctl", "stop", "nuki-sesami"], check=False)
-        subprocess.run(["/usr/bin/systemctl", "disable", "nuki-sesami"], check=False)
-        subprocess.run(["/usr/bin/rm", "-vrf", systemd_fname], check=False)
+        exec(systemctl + ["stop", "nuki-sesami"], logger, check=False)
+        exec(systemctl + ["disable", "nuki-sesami"], logger, check=False)
+        exec(["/usr/bin/rm", "-vrf", systemd_fname], logger, check=False)
         return
 
     sesami = shutil.which('nuki-sesami')
     if not sesami:
-        logger.error("Failed to detect 'nuki-sesami' binary")
+        logger.error("failed to detect 'nuki-sesami' binary")
         sys.exit(1)
 
     pth = [x for x in sys.path if x.startswith('/home/')]
     env = 'PYTHONPATH=%s:$PYTHONPATH' % pth[0] if len(pth) else ''
 
+    d = os.path.dirname(systemd_fname)
+    if not os.path.exists(d):
+        os.makedirs(d)
+
     with open(systemd_fname, 'w+') as f:
         f.write(SYSTEMD_TEMPLATE % (env, sesami, device, host, username, password))
-        logger.info("Created systemd file; '%s'", systemd_fname)
+        logger.info("created '%s'", systemd_fname)
 
     try:
-        subprocess.run(["/usr/bin/systemctl", "dAaemon-reload"], check=True)
-        subprocess.run(["/usr/bin/systemctl", "enable", "nuki-sesami"], check=True)
-        subprocess.run(["/usr/bin/systemctl", "start", "nuki-sesami"], check=True)
+        exec(systemctl + ["daemon-reload"], logger, check=True)
+        exec(systemctl + ["enable", "nuki-sesami"], logger, check=True)
+        exec(systemctl + ["start", "nuki-sesami"], logger, check=True)
+        logger.info("done")
     except subprocess.CalledProcessError:
-        logger.exception("Failed to install nuki-sesami systemd service")
+        logger.exception("failed to install nuki-sesami systemd service")
         sys.exit(1)
-
-
-def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
-    '''Returns a logger instance for the given name and path.
-
-    The logger for will rotating log files with a maximum size of 1MB and
-    a maximum of 10 log files.
-
-    Parameters:
-    * name: name of the logger, e.g. 'nuki-sesami'
-    * path: complete path for storing the log files, e.g. '/var/log/nuki-sesami'
-    * level: logging level, e.g; logging.DEBUG
-
-    '''
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-    logger.addHandler(handler)
-    handler = RotatingFileHandler(f'{os.path.join(path,name)}.log', maxBytes=1048576, backupCount=10)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-    logger.addHandler(handler)
-    return logger
-
-
-def is_virtual_env():
-    '''Returns true when running in a virtual environment.'''
-    return sys.prefix != sys.base_prefix
 
 
 def main():
@@ -108,8 +87,8 @@ def main():
     parser.add_argument('-R', '--remove', help="Remove nuki-sesami systemd service", action='store_true')
 
     args = parser.parse_args()
-    root = sys.prefix if is_virtual_env() else '/'
-    logpath = os.path.join(root, 'var/log/nuki-sesami-daemon')
+    prefix = sys.prefix if is_virtual_env() else '/'
+    logpath = os.path.join(prefix, 'var/log/nuki-sesami-daemon')
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)
@@ -124,15 +103,14 @@ def main():
         logger.debug("remove      : %s", args.remove)
 
     if 'VIRTUAL_ENV' in os.environ:
-        logger.error("Virtual environment detected, systemd is not supported")
-        sys.exit(1)
+        logger.info("virtual environment detected, performing dummy installation")
 
     try:
         nuki_sesami_systemd(logger, args.device, args.host, args.username, args.password, args.remove)
     except KeyboardInterrupt:
-        logger.info("Program terminated")
+        logger.info("program terminated")
     except Exception:
-        logger.exception("System daemon installation failed")
+        logger.exception("system daemon installation failed")
 
 
 if __name__ == "__main__":
