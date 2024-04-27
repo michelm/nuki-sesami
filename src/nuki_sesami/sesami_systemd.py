@@ -5,9 +5,8 @@ import shutil
 import subprocess
 import sys
 from logging import Logger
-from logging.handlers import RotatingFileHandler
-from nuki_sesami.util import is_virtual_env, getlogger, exec
 
+from nuki_sesami.util import getlogger, is_virtual_env, run
 
 SYSTEMD_TEMPLATE = '''[Unit]
 Description=Electric door controller using a Nuki 3.0 pro smart lock
@@ -36,9 +35,9 @@ def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, p
     systemctl = ["echo", "/usr/bin/systemctl"] if is_virtual_env() else ["systemctl"]
 
     if remove:
-        exec(systemctl + ["stop", "nuki-sesami"], logger, check=False)
-        exec(systemctl + ["disable", "nuki-sesami"], logger, check=False)
-        exec(["/usr/bin/rm", "-vrf", systemd_fname], logger, check=False)
+        run([*systemctl, "stop", "nuki-sesami"], logger, check=False)
+        run([*systemctl, "disable", "nuki-sesami"], logger, check=False)
+        run(["/usr/bin/rm", "-vrf", systemd_fname], logger, check=False)
         return
 
     sesami = shutil.which('nuki-sesami')
@@ -58,9 +57,9 @@ def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, p
         logger.info("created '%s'", systemd_fname)
 
     try:
-        exec(systemctl + ["daemon-reload"], logger, check=True)
-        exec(systemctl + ["enable", "nuki-sesami"], logger, check=True)
-        exec(systemctl + ["start", "nuki-sesami"], logger, check=True)
+        run([*systemctl, "daemon-reload"], logger, check=True)
+        run([*systemctl, "enable", "nuki-sesami"], logger, check=True)
+        run([*systemctl, "start", "nuki-sesami"], logger, check=True)
         logger.info("done")
     except subprocess.CalledProcessError:
         logger.exception("failed to install nuki-sesami systemd service")

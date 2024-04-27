@@ -4,12 +4,12 @@ import os
 import sys
 from enum import IntEnum
 from logging import Logger
-from logging.handlers import RotatingFileHandler
 
 import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.door_state import DoorState, next_door_state
+from nuki_sesami.util import getlogger, is_virtual_env
 
 
 class NukiLockState(IntEnum):
@@ -37,33 +37,53 @@ class NukiLockAction(IntEnum):
     button          = 90 # (without action) button (without action)
 
 
+class NukiDoorSensorState(IntEnum):
+    deactivated         = 1 # door sensor not used
+    door_closed         = 2
+    door_opened         = 3
+    door_state_unknown  = 4
+    calibrating         = 5
+    uncalibrated        = 16
+    tampered            = 240
+    unknown             = 255
+
+
 class PushbuttonLogic(IntEnum):
     openhold    = 0
     open        = 1
     toggle      = 2 # toggle between 'open' and 'openhold' door modes
 
 
-def mqtt_on_connect(client, userdata, flags, rc):
+def mqtt_on_connect(client, userdata, flags, rc, properties):
     '''The callback for when the client receives a CONNACK response from the server.
 
     Allways subscribes to topics ensuring subscriptions will be renwed on reconnect.
     '''
     door = userdata
-    if rc == mqtt.CONNACK_ACCEPTED:
-        door.logger.info("(mqtt) connected; code=%i, flags=%s", rc, flags)
+
+    if rc.is_failure:
+        door.logger.error("(mqtt) connect failed; code=%i, flags=%s, properties=%r",
+                          rc, flags, properties)
     else:
-        door.logger.error("(mqtt) connect failed; code=%i, flags=%s", rc, flags)
-    client.subscribe(f"nuki/{door.nuki_device_id}/state")
+        door.logger.info("(mqtt) connected; code=%r, flags=%s, properties=%r",
+                         rc, flags, properties)
+        client.subscribe(f"nuki/{door.nuki_device_id}/state")
+        # TODO: add door sensor logic
+        #client.subscribe(f"nuki/{door.nuki_device_id}/doorSensorState")
 
 
-def mqtt_on_message(_, userdata, msg):
+def mqtt_on_message(_client, userdata, msg):
     '''The callback for when a PUBLISH message of Nuki smart lock state is received.
     '''
     door = userdata
     try:
-        lock = NukiLockState(int(msg.payload))
-        door.logger.info("(mqtt) topic=%s, lock=%s:%i", msg.topic, lock.name, int(lock))
-        door.on_lock_state_changed(lock)
+        if msg.topic == f"nuki/{door.nuki_device_id}/state":
+            lock = NukiLockState(int(msg.payload))
+            door.logger.info("(mqtt) topic=%s, lock=%s:%i", msg.topic, lock.name, int(lock))
+            door.on_lock_state_changed(lock)
+        else:
+            door.logger.info("(mqtt) topic=%s, payload=%r, type=%s",
+                            msg.topic, msg.payload, type(msg.payload))
     except Exception:
         door.logger.exception("(mqtt) topic=%s, payload=%s, payload_type=%s, payload_length=%i",
             msg.topic, msg.payload, type(msg.payload), len(msg.payload)
@@ -243,36 +263,6 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             self.open()
         elif self.state == DoorState.openhold:
             pass # no action here
-
-
-def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
-    '''Returns a logger instance for the given name and path.
-
-    The logger for will rotating log files with a maximum size of 1MB and
-    a maximum of 10 log files.
-
-    Parameters:
-    * name: name of the logger, e.g. 'nuki-sesami'
-    * path: complete path for storing the log files, e.g. '/var/log/nuki-sesami'
-    * level: logging level, e.g; logging.DEBUG
-
-    '''
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-    logger.addHandler(handler)
-    handler = RotatingFileHandler(f'{os.path.join(path,name)}.log', maxBytes=1048576, backupCount=10)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-    logger.addHandler(handler)
-    return logger
-
-
-def is_virtual_env():
-    '''Returns true when running in a virtual environment.'''
-    return sys.prefix != sys.base_prefix
 
 
 def main():
