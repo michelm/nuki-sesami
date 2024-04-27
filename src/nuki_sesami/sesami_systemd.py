@@ -28,18 +28,16 @@ WantedBy=multi-user.target
 '''
 
 
-def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, password: str,
-                        remove: bool = False)  -> None:
+def get_systemctl() -> list[str]:
+    return ["echo", "/usr/bin/systemctl"] if is_virtual_env() else ["systemctl"]
+
+
+def get_systemd_service_fname() -> str:
     prefix = sys.prefix if is_virtual_env() else '/'
-    systemd_fname = os.path.join(prefix,  'lib/systemd/system/nuki-sesami.service')
-    systemctl = ["echo", "/usr/bin/systemctl"] if is_virtual_env() else ["systemctl"]
+    return os.path.join(prefix,  'lib/systemd/system/nuki-sesami.service')
 
-    if remove:
-        run([*systemctl, "stop", "nuki-sesami"], logger, check=False)
-        run([*systemctl, "disable", "nuki-sesami"], logger, check=False)
-        run(["/usr/bin/rm", "-vrf", systemd_fname], logger, check=False)
-        return
 
+def systemd_service_install(logger: Logger, device: str, host: str, username: str, password: str) -> None:
     sesami = shutil.which('nuki-sesami')
     if not sesami:
         logger.error("failed to detect 'nuki-sesami' binary")
@@ -47,14 +45,17 @@ def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, p
 
     pth = [x for x in sys.path if x.startswith('/home/')]
     env = 'PYTHONPATH=%s:$PYTHONPATH' % pth[0] if len(pth) else ''
+    fname = get_systemd_service_fname()
 
-    d = os.path.dirname(systemd_fname)
+    d = os.path.dirname(fname)
     if not os.path.exists(d):
         os.makedirs(d)
 
-    with open(systemd_fname, 'w+') as f:
+    with open(fname, 'w+') as f:
         f.write(SYSTEMD_TEMPLATE % (env, sesami, device, host, username, password))
-        logger.info("created '%s'", systemd_fname)
+        logger.info("created '%s'", fname)
+
+    systemctl = get_systemctl()
 
     try:
         run([*systemctl, "daemon-reload"], logger, check=True)
@@ -64,6 +65,14 @@ def nuki_sesami_systemd(logger: Logger, device: str, host: str, username: str, p
     except subprocess.CalledProcessError:
         logger.exception("failed to install nuki-sesami systemd service")
         sys.exit(1)
+
+
+def systemd_service_remove(logger: Logger) -> None:
+    fname = get_systemd_service_fname()
+    systemctl = get_systemctl()
+    run([*systemctl, "stop", "nuki-sesami"], logger, check=False)
+    run([*systemctl, "disable", "nuki-sesami"], logger, check=False)
+    run(["/usr/bin/rm", "-vrf", fname], logger, check=False)
 
 
 def main():
@@ -105,7 +114,10 @@ def main():
         logger.info("virtual environment detected, performing dummy installation")
 
     try:
-        nuki_sesami_systemd(logger, args.device, args.host, args.username, args.password, args.remove)
+        if args.remove:
+            systemd_service_remove(logger)
+        else:
+            systemd_service_install(logger, args.device, args.host, args.username, args.password)
     except KeyboardInterrupt:
         logger.info("program terminated")
     except Exception:

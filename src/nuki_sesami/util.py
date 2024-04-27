@@ -36,7 +36,7 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     return logger
 
 
-def run(cmd: list[str] | str, logger: Logger, check: bool = True):
+def run(cmd: list[str] | str, logger: Logger, check: bool):
     '''Runs a command and reirects stdout and stderr to the logger.
 
     Throws a subprocess.CalledProcessError when check is True and the command
@@ -50,9 +50,9 @@ def run(cmd: list[str] | str, logger: Logger, check: bool = True):
         if proc.stderr:
             logger.error("%s", proc.stderr.decode())
     except subprocess.CalledProcessError as e:
-        logger.error("%s", e.stderr.decode())
+        logger.exception("%s", e.stderr.decode())
         raise
     except FileNotFoundError as e:
-        logger.error("%s '%s'", e.strerror, e.filename)
+        logger.exception("%s '%s'", e.strerror, e.filename)
         raise
 

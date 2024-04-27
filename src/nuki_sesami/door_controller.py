@@ -8,7 +8,7 @@ from logging import Logger
 import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
 
-from nuki_sesami.door_state import DoorState, next_door_state
+from nuki_sesami.door_state import DoorMode, DoorState, next_door_state
 from nuki_sesami.util import getlogger, is_virtual_env
 
 
@@ -130,8 +130,7 @@ class ElectricDoor:
 
     def activate(self, host: str, port: int, username: str | None, password: str | None):
         self._opendoor.off()
-        self._openhold_mode.off()
-        self._openclose_mode.on()
+        self.mode = DoorMode.openclose
         if username and password:
             self._mqtt.username_pw_set(username, password)
         self._mqtt.connect(host, port, 60)
@@ -161,8 +160,13 @@ class ElectricDoor:
     def nuki_device_id(self) -> str:
         return self._nuki_device_id
 
-    def mode(self, openhold: bool):
-        if openhold:
+    @property
+    def mode(self) -> DoorMode:
+        return DoorMode.openhold if self.openhold else DoorMode.openclose
+
+    @mode.setter
+    def mode(self, mode: DoorMode):
+        if mode == DoorMode.openhold:
             self.logger.info("(mode) open and hold")
             self._openhold_mode.on()
             self._openclose_mode.off()
@@ -184,14 +188,14 @@ class ElectricDoor:
         self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked]:
             self.lock_action(NukiLockAction.unlock)
-        self.mode(openhold=False)
+        self.mode = DoorMode.openclose
 
     def on_lock_state_changed(self, lock: NukiLockState):
         self.logger.info("(lock_state_changed) state=%s:%i, lock=%s:%i -> %s:%i",
                          self.state.name, self.state, self.lock.name, self.lock, lock.name, lock)
         if self.lock == NukiLockState.unlatching and lock == NukiLockState.unlatched:
             if self.openhold:
-                self.mode(openhold=True)
+                self.mode = DoorMode.openhold
             else:
                 self.logger.info("(relay) opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)

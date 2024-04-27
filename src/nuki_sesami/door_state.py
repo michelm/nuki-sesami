@@ -20,6 +20,12 @@ def next_door_state(state: DoorState) -> DoorState:
     return DoorState((state + 1) % len(DoorState))
 
 
+class DoorMode(IntEnum):
+    openclose       = 0 # door is open for a brief moment, the actual time is defined by the
+                        # ERREKA 'Smart Evolution' electric door controller
+    openhold        = 2 # door will be held open until the pushbutton is pressed again
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
