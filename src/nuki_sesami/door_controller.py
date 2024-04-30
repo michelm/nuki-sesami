@@ -1,18 +1,17 @@
 import argparse
+import json
 import logging
 import os
 import sys
 from enum import IntEnum
 from logging import Logger
-from typing import Any, Tuple
-import json
+from typing import Any
 
 import paho.mqtt.client as mqtt
+from gpiozero import Button, DigitalOutputDevice
 from paho.mqtt.reasoncodes import ReasonCode
 
-from gpiozero import Button, DigitalOutputDevice
-
-from nuki_sesami.door_state import DoorMode, DoorState, DoorRequestState, next_door_state
+from nuki_sesami.door_state import DoorMode, DoorRequestState, DoorState, next_door_state
 from nuki_sesami.util import getlogger, is_virtual_env
 
 
@@ -58,7 +57,7 @@ class PushbuttonLogic(IntEnum):
     toggle      = 2 # toggle between 'open' and 'openhold' door modes
 
 
-def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags, 
+def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
                     rcode: ReasonCode, _props):
     '''The callback for when the client receives a CONNACK response from the server.
 
@@ -69,16 +68,16 @@ def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags
     if rcode.is_failure:
         door.logger.error("(mqtt) connect failed; rcode=%r, flags=%r", rcode, flags)
         return
-    
+
     door.logger.info("(mqtt) connected; rcode=%r, flags=%r", rcode, flags)
     client.subscribe(f"nuki/{door.nuki_device_id}/state")
     client.subscribe(f"nuki/{door.nuki_device_id}/doorsensorState")
     mode = door.mode
-    client.publish(f"sesami/{door.nuki_device_id}/state", int(door.state), retain=True) # internal state, only for debugging
+    client.publish(f"sesami/{door.nuki_device_id}/state", int(door.state), retain=True) # internal state (debugging)
     client.publish(f"sesami/{door.nuki_device_id}/mode", int(mode), retain=True)
     client.publish(f"sesami/{door.nuki_device_id}/relay/openhold", int(mode == DoorMode.openhold), retain=True)
     client.publish(f"sesami/{door.nuki_device_id}/relay/openclose", int(mode != DoorMode.openhold), retain=True)
-    client.publish(f"sesami/{door.nuki_device_id}/relay/opendoor", int(0))
+    client.publish(f"sesami/{door.nuki_device_id}/relay/opendoor", 0)
     client.subscribe(f"sesami/{door.nuki_device_id}/request/state") # == DoorRequestState
 
 
@@ -225,7 +224,8 @@ class ElectricDoor:
 
     def close(self):
         self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
-        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching, NukiLockState.unlocked, NukiLockState.unlocked2]:
+        if self.lock not in [NukiLockState.unlatched, NukiLockState.unlatching,
+                             NukiLockState.unlocked, NukiLockState.unlocked2]:
             self.lock_action(NukiLockAction.unlock)
         self.mode = DoorMode.openclose
 
@@ -238,7 +238,7 @@ class ElectricDoor:
             else:
                 self.logger.info("(relay) opening door")
                 self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-                self._mqtt.publish(f"sesami/{self.nuki_device_id}/relay/opendoor", int(1))
+                self._mqtt.publish(f"sesami/{self.nuki_device_id}/relay/opendoor", 1)
         elif lock not in [NukiLockState.unlatched, NukiLockState.unlatching] and self.state == DoorState.openclose2:
             self.state = DoorState.openclose1
         self.lock = lock
@@ -247,7 +247,7 @@ class ElectricDoor:
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
                          self.state.name, self.state, self.sensor.name, self.sensor, sensor.name, sensor)
         self.sensor = sensor
-    
+
     def on_door_request(self, request: DoorRequestState):
         '''Process a requested door state received from the MQTT broker.
 
@@ -273,7 +273,7 @@ class ElectricDoor:
                          self.state.name, self.state, self.lock.name, self.lock, request.name, request)
         if request == DoorRequestState.none:
             return
-        elif request == DoorRequestState.open:
+        if request == DoorRequestState.open:
             if self.state == DoorState.openclose1:
                 self.state = DoorState.openclose2
                 self.open()
@@ -281,10 +281,9 @@ class ElectricDoor:
             if self.state == DoorState.openhold:
                 self.state = DoorState.openclose1
                 self.close()
-        elif request == DoorRequestState.openhold:
-            if self.state != DoorState.openhold:
-                self.state = DoorState.openhold
-                self.open()
+        elif request == DoorRequestState.openhold and self.state != DoorState.openhold:
+            self.state = DoorState.openhold
+            self.open()
 
     def on_pushbutton_pressed(self):
         pass # defined in derived classes
@@ -344,10 +343,10 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             pass # no action here
 
 
-def get_username_password(auth_file: str, username: str, password: str) -> Tuple[str, str]:
+def get_username_password(auth_file: str, username: str, password: str) -> tuple[str, str]:
     '''Returns the (mqtt) username and password from the auth_file or the command line arguments.
 
-    If username and/or password are not provided; i.e. are None, and the auth_file 
+    If username and/or password are not provided; i.e. are None, and the auth_file
     exists then the username and password from the auth_file will be used and returned.
 
     Parameters:
@@ -361,8 +360,8 @@ def get_username_password(auth_file: str, username: str, password: str) -> Tuple
     '''
     if not os.path.exists(auth_file):
         return username, password
-    
-    with open(auth_file, 'r') as f:
+
+    with open(auth_file) as f:
         auth = json.load(f)
 
     if username is None:

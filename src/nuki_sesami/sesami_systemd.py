@@ -1,14 +1,14 @@
 import argparse
+import json
 import logging
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from logging import Logger
-import json
-import stat
 
-from nuki_sesami.util import getlogger, is_virtual_env, run, get_auth_fname
+from nuki_sesami.util import get_auth_fname, getlogger, is_virtual_env, run
 
 SYSTEMD_TEMPLATE = '''[Unit]
 Description=Electric door controller using a Nuki 3.0 pro smart lock
@@ -58,7 +58,7 @@ def create_auth_file(logger: Logger, username: str, password: str) -> str:
         json.dump(auth, f)
     logger.info("created '%s'", fname)
 
-    os.chmod(fname, stat.S_IRUSR)    
+    os.chmod(fname, stat.S_IRUSR)
     return fname
 
 

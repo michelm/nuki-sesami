@@ -4,7 +4,6 @@ import subprocess
 import sys
 from logging import Logger
 from logging.handlers import RotatingFileHandler
-from typing import List
 
 
 def is_virtual_env():
@@ -37,7 +36,7 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     return logger
 
 
-def run(cmd: List[str], logger: Logger, check: bool):
+def run(cmd: list[str], logger: Logger, check: bool):
     '''Runs a command and reirects stdout and stderr to the logger.
 
     Throws a subprocess.CalledProcessError when check is True and the command
@@ -47,7 +46,7 @@ def run(cmd: List[str], logger: Logger, check: bool):
     * cmd: command to run, e.g. ['ls', '-l']
     * logger: logger instance
     * check: True to throw an exception when the command fails
-    
+
     '''
     logger.info("run '%s'", ' '.join(cmd) if isinstance(cmd, list) else cmd)
     try:
@@ -74,5 +73,4 @@ def get_auth_fname() -> str:
     '''
     if is_virtual_env():
         return os.path.join(sys.prefix, 'etc', 'nuki-sesami', 'auth.json')
-    else:
-        return '/etc/nuki-sesami/auth.json'
+    return '/etc/nuki-sesami/auth.json'
