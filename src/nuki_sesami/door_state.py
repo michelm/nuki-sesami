@@ -26,6 +26,13 @@ class DoorMode(IntEnum):
     openhold        = 1 # door will be held open until the pushbutton is pressed again
 
 
+class DoorRequestState(IntEnum):
+    none            = 0 # no request
+    close           = 1 # close the door
+    open            = 2 # open the door briefly and then close it
+    openhold        = 3 # open the door and hold it open
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

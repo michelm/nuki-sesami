@@ -12,8 +12,8 @@ from paho.mqtt.reasoncodes import ReasonCode
 
 from gpiozero import Button, DigitalOutputDevice
 
-from nuki_sesami.door_state import DoorMode, DoorState, next_door_state
-from nuki_sesami.util import getlogger, is_virtual_env, get_auth_fname
+from nuki_sesami.door_state import DoorMode, DoorState, DoorRequestState, next_door_state
+from nuki_sesami.util import getlogger, is_virtual_env
 
 
 class NukiLockState(IntEnum):
@@ -74,11 +74,12 @@ def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags
     client.subscribe(f"nuki/{door.nuki_device_id}/state")
     client.subscribe(f"nuki/{door.nuki_device_id}/doorsensorState")
     mode = door.mode
-    client.publish(f"sesami/{door.nuki_device_id}/state", int(door.state), retain=True)
+    client.publish(f"sesami/{door.nuki_device_id}/state", int(door.state), retain=True) # internal state, only for debugging
     client.publish(f"sesami/{door.nuki_device_id}/mode", int(mode), retain=True)
     client.publish(f"sesami/{door.nuki_device_id}/relay/openhold", int(mode == DoorMode.openhold), retain=True)
     client.publish(f"sesami/{door.nuki_device_id}/relay/openclose", int(mode != DoorMode.openhold), retain=True)
     client.publish(f"sesami/{door.nuki_device_id}/relay/opendoor", int(0))
+    client.subscribe(f"sesami/{door.nuki_device_id}/request/state") # == DoorRequestState
 
 
 def mqtt_on_message(_client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
@@ -94,6 +95,10 @@ def mqtt_on_message(_client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
             sensor = NukiDoorsensorState(int(msg.payload))
             door.logger.info("(mqtt) topic=%s, sensor=%s:%i", msg.topic, sensor.name, int(sensor))
             door.on_doorsensor_state(sensor)
+        elif msg.topic == f"sesami/{door.nuki_device_id}/request/state":
+            request = DoorRequestState(int(msg.payload))
+            door.logger.info("(mqtt) topic=%s, request=%s:%i", msg.topic, request.name, int(request))
+            door.on_door_request(request)
         else:
             door.logger.info("(mqtt) topic=%s, payload=%r, type=%s",
                             msg.topic, msg.payload, type(msg.payload))
@@ -242,17 +247,47 @@ class ElectricDoor:
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
                          self.state.name, self.state, self.sensor.name, self.sensor, sensor.name, sensor)
         self.sensor = sensor
-        
+    
+    def on_door_request(self, request: DoorRequestState):
+        '''Process a requested door state received from the MQTT broker.
+
+        The Door request state is used to open/close the door and/or hold the door
+        open based on the current door state and mode.
+
+        Request processing logic:
+        - open
+            * if door is closed then open the door
+            * if door is in openhold mode then ignore the request
+        - close:
+            * if door is in openhold mode then close the door
+        - openhold:
+            * if door is not open then open it and keep it open
+            * ignore request if already in openhold mode
+        - none:
+            * ignore request
+
+        Parameters:
+        * request: the requested door state
+        '''
+        self.logger.info("(door_request) state=%s:%i, lock=%s:%i, request=%s:%i",
+                         self.state.name, self.state, self.lock.name, self.lock, request.name, request)
+        if request == DoorRequestState.none:
+            return
+        elif request == DoorRequestState.open:
+            if self.state == DoorState.openclose1:
+                self.state = DoorState.openclose2
+                self.open()
+        elif request == DoorRequestState.close:
+            if self.state == DoorState.openhold:
+                self.state = DoorState.openclose1
+                self.close()
+        elif request == DoorRequestState.openhold:
+            if self.state != DoorState.openhold:
+                self.state = DoorState.openhold
+                self.open()
+
     def on_pushbutton_pressed(self):
-        self.state = next_door_state(self._state)
-        self.logger.info("(pushbutton_pressed) state=%s:%i, lock=%s:%i",
-                         self.state.name, self.state, self.lock.name, self.lock)
-        if self.state == DoorState.openclose1:
-            self.close()
-        elif self.state == DoorState.openclose2:
-            self.open()
-        elif self.state == DoorState.openhold:
-            pass # no action here
+        pass # defined in derived classes
 
 
 class ElectricDoorPushbuttonOpenHold(ElectricDoor):
@@ -357,7 +392,7 @@ def main():
     parser.add_argument('-3', '--openhold-mode', help="door open and hold mode relay (gpio)pin", default=20, type=int)
     parser.add_argument('-4', '--openclose-mode', help="door open/close mode relay (gpio)pin", default=21, type=int)
     parser.add_argument('-B', '--buttonlogic', help="pushbutton logic when pressed; 0=openhold,1=open,2=toggle",
-                        default=0, type=int)
+                        default=int(PushbuttonLogic.openhold), type=int)
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
