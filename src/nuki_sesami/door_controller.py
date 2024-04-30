@@ -4,7 +4,8 @@ import os
 import sys
 from enum import IntEnum
 from logging import Logger
-from typing import Any
+from typing import Any, Tuple
+import json
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.reasoncodes import ReasonCode
@@ -12,7 +13,7 @@ from paho.mqtt.reasoncodes import ReasonCode
 from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.door_state import DoorMode, DoorState, next_door_state
-from nuki_sesami.util import getlogger, is_virtual_env
+from nuki_sesami.util import getlogger, is_virtual_env, get_auth_fname
 
 
 class NukiLockState(IntEnum):
@@ -141,7 +142,7 @@ class ElectricDoor:
         self._openclose_mode = Relay(openclose_mode_pin, False) # uses normally open relay (NO)
         self._state = DoorState.openclose1
 
-    def activate(self, host: str, port: int, username: str | None, password: str | None):
+    def activate(self, host: str, port: int, username: str, password: str):
         self._opendoor.off()
         self.mode = DoorMode.openclose
         self.state = DoorState.openclose1
@@ -308,6 +309,35 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             pass # no action here
 
 
+def get_username_password(auth_file: str, username: str, password: str) -> Tuple[str, str]:
+    '''Returns the (mqtt) username and password from the auth_file or the command line arguments.
+
+    If username and/or password are not provided; i.e. are None, and the auth_file 
+    exists then the username and password from the auth_file will be used and returned.
+
+    Parameters:
+    * auth_file: str, the file name containing the username and password
+    * username: str, the username from the command line arguments
+    * password: str, the password from the command line arguments
+
+    Returns:
+    * username: str, the username
+    * password: str, the password
+    '''
+    if not os.path.exists(auth_file):
+        return username, password
+    
+    with open(auth_file, 'r') as f:
+        auth = json.load(f)
+
+    if username is None:
+        username = auth['username']
+    if password is None:
+        password = auth['password']
+
+    return username, password
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='nuki-sesami',
@@ -321,10 +351,11 @@ def main():
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
     parser.add_argument('-P', '--password', help="mqtt authentication secret", default=None, type=str)
+    parser.add_argument('-A', '--auth-file', help="secrets file name", default='/etc/nuki-sesami/auth.json', type=str)
     parser.add_argument('-1', '--pushbutton', help="pushbutton door/hold open request (gpio)pin", default=2, type=int)
     parser.add_argument('-2', '--opendoor', help="door open relay (gpio)pin", default=26, type=int)
-    parser.add_argument('-3', '--openhold_mode', help="door open and hold mode relay (gpio)pin", default=20, type=int)
-    parser.add_argument('-4', '--openclose_mode', help="door open/close mode relay (gpio)pin", default=21, type=int)
+    parser.add_argument('-3', '--openhold-mode', help="door open and hold mode relay (gpio)pin", default=20, type=int)
+    parser.add_argument('-4', '--openclose-mode', help="door open/close mode relay (gpio)pin", default=21, type=int)
     parser.add_argument('-B', '--buttonlogic', help="pushbutton logic when pressed; 0=openhold,1=open,2=toggle",
                         default=0, type=int)
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
@@ -341,10 +372,11 @@ def main():
     logger.debug("args.port=%s", args.port)
     logger.debug("args.username=%s", args.username)
     logger.debug("args.password=***")
+    logger.debug("args.auth-file=%s", args.auth_file)
     logger.debug("args.pushbutton=%s", args.pushbutton)
     logger.debug("args.opendoor=%s", args.opendoor)
-    logger.debug("args.openhold_mode=%s", args.openhold_mode)
-    logger.debug("args.openclose_mode=%s", args.openclose_mode)
+    logger.debug("args.openhold-mode=%s", args.openhold_mode)
+    logger.debug("args.openclose-mode=%s", args.openclose_mode)
     logger.debug("args.buttonlogic=%s", args.buttonlogic)
 
     try:
@@ -363,8 +395,10 @@ def main():
         door = ElectricDoorPushbuttonOpenHold(logger, args.device, args.pushbutton, args.opendoor, args.openhold_mode,
                                               args.openclose_mode)
 
+    username, password = get_username_password(args.auth_file, args.username, args.password)
+
     try:
-        door.activate(args.host, args.port, args.username, args.password)
+        door.activate(args.host, args.port, username, password)
     except KeyboardInterrupt:
         logger.info("program terminated; keyboard interrupt")
     except Exception:

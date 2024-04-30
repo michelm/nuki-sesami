@@ -5,8 +5,10 @@ import shutil
 import subprocess
 import sys
 from logging import Logger
+import json
+import stat
 
-from nuki_sesami.util import getlogger, is_virtual_env, run
+from nuki_sesami.util import getlogger, is_virtual_env, run, get_auth_fname
 
 SYSTEMD_TEMPLATE = '''[Unit]
 Description=Electric door controller using a Nuki 3.0 pro smart lock
@@ -18,7 +20,7 @@ Type=simple
 Restart=always
 RestartSec=1
 Environment=%s
-ExecStart=%s %s -H %s -U %s -P %s
+ExecStart=%s %s --host=%s --port=%i --auth-file=%s
 StandardError=journal
 StandardOutput=journal
 StandardInput=null
@@ -37,7 +39,30 @@ def get_systemd_service_fname() -> str:
     return os.path.join(prefix,  'lib/systemd/system/nuki-sesami.service')
 
 
-def systemd_service_install(logger: Logger, device: str, host: str, username: str, password: str) -> None:
+def create_auth_file(logger: Logger, username: str, password: str) -> str:
+    fname = get_auth_fname()
+
+    d = os.path.dirname(fname)
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+    auth = {
+        'username': username,
+        'password': password
+    }
+
+    if os.path.exists(fname):
+        os.unlink(fname)
+
+    with open(fname, 'w+') as f:
+        json.dump(auth, f)
+    logger.info("created '%s'", fname)
+
+    os.chmod(fname, stat.S_IRUSR)    
+    return fname
+
+
+def systemd_service_install(logger: Logger, device: str, host: str, port: int, username: str, password: str) -> None:
     sesami = shutil.which('nuki-sesami')
     if not sesami:
         logger.error("failed to detect 'nuki-sesami' binary")
@@ -51,8 +76,10 @@ def systemd_service_install(logger: Logger, device: str, host: str, username: st
     if not os.path.exists(d):
         os.makedirs(d)
 
+    auth = create_auth_file(logger, username, password)
+
     with open(fname, 'w+') as f:
-        f.write(SYSTEMD_TEMPLATE % (env, sesami, device, host, username, password))
+        f.write(SYSTEMD_TEMPLATE % (env, sesami, device, host, port, auth))
         logger.info("created '%s'", fname)
 
     systemctl = get_systemctl()
@@ -89,6 +116,7 @@ def main():
                         help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
     parser.add_argument('-H', '--host', help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'",
                         default='localhost', type=str)
+    parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
     parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
     parser.add_argument('-P', '--password', help="mqtt authentication secret", default=None, type=str)
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
@@ -106,6 +134,7 @@ def main():
     if args.verbose:
         logger.debug("device      : %s", args.device)
         logger.debug("host        : %s", args.host)
+        logger.debug("port        : %i", args.port)
         logger.debug("username    : %s", args.username)
         logger.debug("password    : ***")
         logger.debug("remove      : %s", args.remove)
@@ -117,7 +146,7 @@ def main():
         if args.remove:
             systemd_service_remove(logger)
         else:
-            systemd_service_install(logger, args.device, args.host, args.username, args.password)
+            systemd_service_install(logger, args.device, args.host, args.port, args.username, args.password)
     except KeyboardInterrupt:
         logger.info("program terminated")
     except Exception:
