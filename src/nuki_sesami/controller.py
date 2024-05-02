@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 import sys
@@ -11,9 +10,9 @@ import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
 from paho.mqtt.reasoncodes import ReasonCode
 
+from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState
 from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, next_door_state
-from nuki_sesami.util import getlogger, get_username_password, is_virtual_env
-from nuki_sesami.lock import NukiLockState, NukiLockAction, NukiDoorsensorState
+from nuki_sesami.util import get_username_password, getlogger, is_virtual_env
 
 
 class PushbuttonLogic(IntEnum):
@@ -331,7 +330,7 @@ def main():
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
-    logpath = os.path.join(sys.prefix, 'var/log/nuki-sesami') if is_virtual_env() else '/var/log/nuki-sesami'
+    logpath = os.path.join(sys.prefix if is_virtual_env() else '/', 'var/log/nuki-sesami')
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)

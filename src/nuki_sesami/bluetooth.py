@@ -1,17 +1,17 @@
-import os
-import sys
-import logging
 import argparse
 import json
+import logging
+import os
+import sys
 from logging import Logger
 from typing import Any
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.reasoncodes import ReasonCode
 
-from nuki_sesami.util import getlogger, get_username_password, is_virtual_env
-from nuki_sesami.lock import NukiLockState, NukiDoorsensorState
-from nuki_sesami.state import DoorState, DoorMode
+from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
+from nuki_sesami.state import DoorMode, DoorState
+from nuki_sesami.util import get_username_password, getlogger, is_virtual_env
 
 
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
@@ -118,12 +118,12 @@ class SesamiBluez:
     @property
     def nuki_lock(self) -> NukiLockState:
         return self._nuki_lock
-    
+
     @nuki_lock.setter
     def nuki_lock(self, state: NukiLockState):
         self._nuki_lock = state
         self.publish_status()
-    
+
     @property
     def nuki_doorsensor(self) -> NukiDoorsensorState:
         return self._nuki_doorsensor
@@ -187,7 +187,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
-    parser.add_argument('macaddr', help="bluetooth mac address to listen on, e.g. '00:00:00:00:00:00'", type=str)
+    parser.add_argument('macaddr', help="bluetooth mac address to listen on, e.g. 'B8:27:EB:B9:2A:F0'", type=str)
     parser.add_argument('-H', '--host',
         help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
@@ -197,7 +197,7 @@ def main():
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
 
     args = parser.parse_args()
-    logpath = os.path.join(sys.prefix, 'var/log/nuki-sesami-bluez') if is_virtual_env() else '/var/log/nuki-sesami-bluez'
+    logpath = os.path.join(sys.prefix if is_virtual_env() else '/', 'var/log/nuki-sesami-bluez')
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)

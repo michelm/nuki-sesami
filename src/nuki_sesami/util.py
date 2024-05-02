@@ -1,8 +1,8 @@
+import json
 import logging
 import os
 import subprocess
 import sys
-import json
 from logging import Logger
 from logging.handlers import RotatingFileHandler
 

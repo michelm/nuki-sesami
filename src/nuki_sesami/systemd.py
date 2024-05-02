@@ -81,7 +81,10 @@ def create_auth_file(logger: Logger, username: str, password: str) -> str:
     return fname
 
 
-def systemd_services_install(logger: Logger, device: str, macaddr: str, host: str, port: int, username: str, password: str) -> None:
+def services_install(logger: Logger, device: str, macaddr: str, host: str, port: int,
+                             username: str, password: str) -> None:
+    '''Installs and starts nuki-sesami and nuki-sesami-bluez systemd services
+    '''
     sesami = shutil.which('nuki-sesami')
     if not sesami:
         logger.error("failed to detect 'nuki-sesami' binary")
@@ -125,7 +128,9 @@ def systemd_services_install(logger: Logger, device: str, macaddr: str, host: st
         sys.exit(1)
 
 
-def systemd_services_remove(logger: Logger) -> None:
+def services_remove(logger: Logger) -> None:
+    '''Removes nuki-sesami and nuki-sesami-bluez systemd services
+    '''
     systemctl = get_systemctl()
     run([*systemctl, "stop", "nuki-sesami"], logger, check=False)
     run([*systemctl, "stop", "nuki-sesami-bluez"], logger, check=False)
@@ -151,10 +156,10 @@ def main():
 
     parser.add_argument('device',
                         help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
-    parser.add_argument('macaddr', 
-                        help="bluetooth mac address to listen on, e.g. '00:00:00:00:00:00'", 
+    parser.add_argument('macaddr',
+                        help="bluetooth mac address to listen on, e.g. 'B8:27:EB:B9:2A:F0'",
                         type=str)
-    parser.add_argument('-H', '--host', 
+    parser.add_argument('-H', '--host',
                         help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'",
                         default='localhost', type=str)
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
@@ -164,8 +169,7 @@ def main():
     parser.add_argument('-R', '--remove', help="Remove nuki-sesami systemd service", action='store_true')
 
     args = parser.parse_args()
-    prefix = sys.prefix if is_virtual_env() else '/'
-    logpath = os.path.join(prefix, 'var/log/nuki-sesami-daemon')
+    logpath = os.path.join(sys.prefix if is_virtual_env() else '/', 'var/log/nuki-sesami-daemon')
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)
@@ -186,9 +190,10 @@ def main():
 
     try:
         if args.remove:
-            systemd_services_remove(logger)
+            services_remove(logger)
         else:
-            systemd_services_install(logger, args.device, args.macaddr, args.host, args.port, args.username, args.password)
+            services_install(logger, args.device, args.macaddr, args.host, args.port,
+                                     args.username, args.password)
     except KeyboardInterrupt:
         logger.info("program terminated")
     except Exception:
