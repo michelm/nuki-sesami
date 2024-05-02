@@ -186,8 +186,8 @@ def main():
         epilog='Belrog: you shall not pass!',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('nuki-device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
-    parser.add_argument('blue-macaddr', help="bluetooth mac address to listen on, e.g. '00:00:00:00:00:00'", type=str)
+    parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
+    parser.add_argument('macaddr', help="bluetooth mac address to listen on, e.g. '00:00:00:00:00:00'", type=str)
     parser.add_argument('-H', '--host',
         help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
     parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
