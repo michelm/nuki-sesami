@@ -2,6 +2,7 @@ import logging
 import os
 import subprocess
 import sys
+import json
 from logging import Logger
 from logging.handlers import RotatingFileHandler
 
@@ -74,3 +75,32 @@ def get_auth_fname() -> str:
     if is_virtual_env():
         return os.path.join(sys.prefix, 'etc', 'nuki-sesami', 'auth.json')
     return '/etc/nuki-sesami/auth.json'
+
+
+def get_username_password(auth_file: str, username: str, password: str) -> tuple[str, str]:
+    '''Returns the (mqtt) username and password from the auth_file or the command line arguments.
+
+    If username and/or password are not provided; i.e. are None, and the auth_file
+    exists then the username and password from the auth_file will be used and returned.
+
+    Parameters:
+    * auth_file: str, the file name containing the username and password
+    * username: str, the username from the command line arguments
+    * password: str, the password from the command line arguments
+
+    Returns:
+    * username: str, the username
+    * password: str, the password
+    '''
+    if not os.path.exists(auth_file):
+        return username, password
+
+    with open(auth_file) as f:
+        auth = json.load(f)
+
+    if username is None:
+        username = auth['username']
+    if password is None:
+        password = auth['password']
+
+    return username, password

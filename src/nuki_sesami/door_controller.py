@@ -12,43 +12,8 @@ from gpiozero import Button, DigitalOutputDevice
 from paho.mqtt.reasoncodes import ReasonCode
 
 from nuki_sesami.door_state import DoorMode, DoorRequestState, DoorState, next_door_state
-from nuki_sesami.util import getlogger, is_virtual_env
-
-
-class NukiLockState(IntEnum):
-    uncalibrated    = 0 # untrained
-    locked          = 1 # online
-    unlocking       = 2
-    unlocked        = 3 # rto active
-    locking         = 4
-    unlatched       = 5 # open
-    unlocked2       = 6 # lock-n-go
-    unlatching      = 7 # opening
-    boot_run        = 253
-    motor_blocked   = 254
-    undefined       = 255
-
-
-class NukiLockAction(IntEnum):
-    unlock          = 1 # activate rto
-    lock            = 2 # deactivate rto
-    unlatch         = 3 # electric strike actuation
-    lock_and_go1    = 4 # lock&go; activate continuous mode
-    lock_and_go2    = 5 # lock&go with unlatch deactivate continuous mode
-    full_lock       = 6
-    fob             = 80 # (without action) fob (without action)
-    button          = 90 # (without action) button (without action)
-
-
-class NukiDoorsensorState(IntEnum):
-    deactivated         = 1 # door sensor not used
-    door_closed         = 2
-    door_opened         = 3
-    door_state_unknown  = 4
-    calibrating         = 5
-    uncalibrated        = 16
-    tampered            = 240
-    unknown             = 255
+from nuki_sesami.util import getlogger, get_username_password, is_virtual_env
+from nuki_sesami.lock import NukiLockState, NukiLockAction, NukiDoorsensorState
 
 
 class PushbuttonLogic(IntEnum):
@@ -341,35 +306,6 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             self.open()
         elif self.state == DoorState.openhold:
             pass # no action here
-
-
-def get_username_password(auth_file: str, username: str, password: str) -> tuple[str, str]:
-    '''Returns the (mqtt) username and password from the auth_file or the command line arguments.
-
-    If username and/or password are not provided; i.e. are None, and the auth_file
-    exists then the username and password from the auth_file will be used and returned.
-
-    Parameters:
-    * auth_file: str, the file name containing the username and password
-    * username: str, the username from the command line arguments
-    * password: str, the password from the command line arguments
-
-    Returns:
-    * username: str, the username
-    * password: str, the password
-    '''
-    if not os.path.exists(auth_file):
-        return username, password
-
-    with open(auth_file) as f:
-        auth = json.load(f)
-
-    if username is None:
-        username = auth['username']
-    if password is None:
-        password = auth['password']
-
-    return username, password
 
 
 def main():
