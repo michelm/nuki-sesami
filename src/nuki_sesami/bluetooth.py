@@ -11,7 +11,7 @@ from paho.mqtt.reasoncodes import ReasonCode
 
 from nuki_sesami.util import getlogger, get_username_password, is_virtual_env
 from nuki_sesami.lock import NukiLockState, NukiDoorsensorState
-from nuki_sesami.door_state import DoorState, DoorMode
+from nuki_sesami.state import DoorState, DoorMode
 
 
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,

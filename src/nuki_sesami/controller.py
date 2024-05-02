@@ -11,7 +11,7 @@ import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
 from paho.mqtt.reasoncodes import ReasonCode
 
-from nuki_sesami.door_state import DoorMode, DoorRequestState, DoorState, next_door_state
+from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, next_door_state
 from nuki_sesami.util import getlogger, get_username_password, is_virtual_env
 from nuki_sesami.lock import NukiLockState, NukiLockAction, NukiDoorsensorState
 

@@ -7,7 +7,7 @@ from logging import Logger
 from logging.handlers import RotatingFileHandler
 
 
-def is_virtual_env():
+def is_virtual_env() -> bool:
     '''Returns true when running in a virtual environment.'''
     return sys.prefix != sys.base_prefix
 
@@ -37,7 +37,7 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     return logger
 
 
-def run(cmd: list[str], logger: Logger, check: bool):
+def run(cmd: list[str], logger: Logger, check: bool) -> None:
     '''Runs a command and reirects stdout and stderr to the logger.
 
     Throws a subprocess.CalledProcessError when check is True and the command
