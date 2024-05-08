@@ -8,7 +8,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 from paho.mqtt.reasoncodes import ReasonCode
 
-from nuki_sesami.clients import get_clients
+from nuki_sesami.clients import SesamiClient, get_clients
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
 from nuki_sesami.state import DoorMode, DoorState
@@ -71,7 +71,7 @@ class SesamiBluez:
     Subscribes as client to MQTT eletrical door opener topics from 'Nuki Sesami'. Received door commands from
     smartphones are forwarded to the MQTT broker.
     '''
-    def __init__(self, logger: Logger, config: SesamiConfig):
+    def __init__(self, logger: Logger, config: SesamiConfig, clients: list[SesamiClient]):
         self._logger = logger
         self._nuki_device = config.nuki_device
         self._nuki_lock = NukiLockState.undefined
@@ -89,6 +89,7 @@ class SesamiBluez:
         self._mqtt_port = config.mqtt_port
         self._bluetooth_macaddr = config.bluetooth_macaddr
         self._bluetooth_port = config.bluetooth_port
+        self._clients = clients
 
     def activate(self, username: str, password: str):
         '''Activates the electric door bluetooth broker.
@@ -239,7 +240,7 @@ def main():
     for client in clients:
         logger.debug("client           : mac(%s), pubkey(%s)", client.macaddr, client.pubkey)
 
-    sesamibluez = SesamiBluez(logger, config)
+    sesamibluez = SesamiBluez(logger, config, clients)
 
     try:
         sesamibluez.activate(config.mqtt_username, config.mqtt_password)
