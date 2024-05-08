@@ -1,3 +1,10 @@
+#
+# Use gpiozero mock factory when testing:
+#   export GPIOZERO_PIN_FACTORY=mock
+#
+# See https://gpiozero.readthedocs.io/en/stable/api_output.html#gpiozero.pins.mock.MockFactory
+# for more information.
+
 import argparse
 import logging
 import os
