@@ -23,7 +23,7 @@ classifiers = [
 
 [project.scripts]
 nuki-sesami = "nuki_sesami.controller:main"
-nuki-sesami-systemd = "nuki_sesami.systemd:main"
+nuki-sesami-admin = "nuki_sesami.admin:main"
 nuki-sesami-bluez = "nuki_sesami.bluetooth:main"
 
 [project.urls]

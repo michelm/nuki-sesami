@@ -60,6 +60,12 @@ class DoorRequestState(IntEnum):
     openhold        = 3 # open the door and hold it open
 
 
+class PushbuttonLogic(IntEnum):
+    openhold    = 0
+    open        = 1
+    toggle      = 2 # toggle between 'open' and 'openhold' door modes
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import subprocess
@@ -23,6 +22,8 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     * path: complete path for storing the log files, e.g. '/var/log/nuki-sesami'
     * level: logging level, e.g; logging.DEBUG
 
+    Returns:
+    * logger: logger instance
     '''
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -64,43 +65,20 @@ def run(cmd: list[str], logger: Logger, check: bool) -> None:
         raise
 
 
-def get_auth_fname() -> str:
-    '''Returns the authentication file path (<prefix>/nuki-sesami/auth.json).
-
-    When running in a virtual environment, the authentication file is expected
-    in the virtual environment's etc directory.
-
-    Otherwise the authentication file is expected in /etc.
-    '''
-    if is_virtual_env():
-        return os.path.join(sys.prefix, 'etc', 'nuki-sesami', 'auth.json')
-    return '/etc/nuki-sesami/auth.json'
+def get_prefix() -> str:
+    if os.geteuid() == 0:
+        return '/'
+    elif is_virtual_env():
+        return sys.prefix
+    else:
+        return os.path.join(os.path.expanduser('~'), '.local')
 
 
-def get_username_password(auth_file: str, username: str, password: str) -> tuple[str, str]:
-    '''Returns the (mqtt) username and password from the auth_file or the command line arguments.
+def get_config_path() -> str:
+    if os.geteuid() == 0:
+        return '/etc/nuki-sesami'
+    elif is_virtual_env():
+        return os.path.join(sys.prefix, 'etc', 'nuki-sesami')
+    else:
+        return os.path.join(os.path.expanduser('~'), '.config', 'nuki-sesami')
 
-    If username and/or password are not provided; i.e. are None, and the auth_file
-    exists then the username and password from the auth_file will be used and returned.
-
-    Parameters:
-    * auth_file: str, the file name containing the username and password
-    * username: str, the username from the command line arguments
-    * password: str, the password from the command line arguments
-
-    Returns:
-    * username: str, the username
-    * password: str, the password
-    '''
-    if not os.path.exists(auth_file):
-        return username, password
-
-    with open(auth_file) as f:
-        auth = json.load(f)
-
-    if username is None:
-        username = auth['username']
-    if password is None:
-        password = auth['password']
-
-    return username, password

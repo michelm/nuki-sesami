@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-import sys
 from logging import Logger
 from typing import Any
 
@@ -11,7 +10,9 @@ from paho.mqtt.reasoncodes import ReasonCode
 
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
 from nuki_sesami.state import DoorMode, DoorState
-from nuki_sesami.util import get_username_password, getlogger, is_virtual_env
+from nuki_sesami.util import get_config_path, get_prefix, getlogger
+from nuki_sesami.config import SesamiConfig, get_config
+from nuki_sesami.clients import SesamiClient, get_clients
 
 
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
@@ -27,13 +28,13 @@ def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags
         return
 
     sesamibluez.logger.info("(mqtt) connected; rcode=%r, flags=%r", rcode, flags)
-    client.subscribe(f"nuki/{sesamibluez.nuki_device_id}/state")
-    client.subscribe(f"nuki/{sesamibluez.nuki_device_id}/doorsensorState")
-    client.subscribe(f"sesami/{sesamibluez.nuki_device_id}/state") # internal state (debugging)
-    client.subscribe(f"sesami/{sesamibluez.nuki_device_id}/mode")
-    client.subscribe(f"sesami/{sesamibluez.nuki_device_id}/relay/openhold")
-    client.subscribe(f"sesami/{sesamibluez.nuki_device_id}/relay/openclose")
-    client.subscribe(f"sesami/{sesamibluez.nuki_device_id}/relay/opendoor")
+    client.subscribe(f"nuki/{sesamibluez.nuki_device}/state")
+    client.subscribe(f"nuki/{sesamibluez.nuki_device}/doorsensorState")
+    client.subscribe(f"sesami/{sesamibluez.nuki_device}/state") # internal state (debugging)
+    client.subscribe(f"sesami/{sesamibluez.nuki_device}/mode")
+    client.subscribe(f"sesami/{sesamibluez.nuki_device}/relay/openhold")
+    client.subscribe(f"sesami/{sesamibluez.nuki_device}/relay/openclose")
+    client.subscribe(f"sesami/{sesamibluez.nuki_device}/relay/opendoor")
 
 
 def mqtt_on_message(_client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
@@ -41,19 +42,19 @@ def mqtt_on_message(_client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
     '''
     sesamibluez = userdata
     try:
-        if msg.topic == f"nuki/{sesamibluez.nuki_device_id}/state":
+        if msg.topic == f"nuki/{sesamibluez.nuki_device}/state":
             sesamibluez.nuki_lock = NukiLockState(int(msg.payload))
-        elif msg.topic == f"nuki/{sesamibluez.nuki_device_id}/doorsensorState":
+        elif msg.topic == f"nuki/{sesamibluez.nuki_device}/doorsensorState":
             sesamibluez.nuki_doorsensor = NukiDoorsensorState(int(msg.payload))
-        elif msg.topic == f"sesami/{sesamibluez.nuki_device_id}/state":
+        elif msg.topic == f"sesami/{sesamibluez.nuki_device}/state":
             sesamibluez.door_state = DoorState(int(msg.payload))
-        elif msg.topic == f"sesami/{sesamibluez.nuki_device_id}/mode":
+        elif msg.topic == f"sesami/{sesamibluez.nuki_device}/mode":
             sesamibluez.door_mode = DoorMode(int(msg.payload))
-        elif msg.topic == f"sesami/{sesamibluez.nuki_device_id}/relay/openhold":
+        elif msg.topic == f"sesami/{sesamibluez.nuki_device}/relay/openhold":
             sesamibluez.relay_openhold = msg.payload == "1"
-        elif msg.topic == f"sesami/{sesamibluez.nuki_device_id}/relay/openclose":
+        elif msg.topic == f"sesami/{sesamibluez.nuki_device}/relay/openclose":
             sesamibluez.relay_openclose = msg.payload == "1"
-        elif msg.topic == f"sesami/{sesamibluez.nuki_device_id}/relay/opendoor":
+        elif msg.topic == f"sesami/{sesamibluez.nuki_device}/relay/opendoor":
             sesamibluez.relay_opendoor = msg.payload == "1"
         else:
             sesamibluez.logger.info("(mqtt) topic=%s, payload=%r, type=%s",
@@ -70,10 +71,9 @@ class SesamiBluez:
     Subscribes as client to MQTT eletrical door opener topics from 'Nuki Sesami'. Received door commands from
     smartphones are forwarded to the MQTT broker.
     '''
-    def __init__(self, logger: Logger, nuki_device_id: str, bluetooth_macaddr: str):
+    def __init__(self, logger: Logger, config: SesamiConfig):
         self._logger = logger
-        self._nuki_device_id = nuki_device_id
-        self._bluetooth_macaddr = bluetooth_macaddr
+        self._nuki_device = config.nuki_device
         self._nuki_lock = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
         self._door_state = DoorState.openclose1
@@ -84,12 +84,28 @@ class SesamiBluez:
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._mqtt.on_connect = mqtt_on_connect
         self._mqtt.on_message = mqtt_on_message
-        self._mqtt.user_data_set(self) # pass instance of electricdoor
+        self._mqtt.user_data_set(self) # pass instance of bluetooth broker
+        self._mqtt_host = config.mqtt_host
+        self._mqtt_port = config.mqtt_port
+        self._bluetooth_macaddr = config.bluetooth_macaddr
+        self._bluetooth_port = config.bluetooth_port
 
-    def activate(self, host: str, port: int, username: str, password: str):
+    def activate(self, username: str, password: str):
+        '''Activates the electric door bluetooth broker.
+
+        Start listening on incoming bluetooth connections, connects to MQTT broker and
+        subscribes to nuki smartlock / door state topics.
+
+        Parameters:
+        * username: MQTT username
+        * password: MQTT password
+        '''
+
+        # TODO: start listening on incoming blueooth connections
+
         if username and password:
             self._mqtt.username_pw_set(username, password)
-        self._mqtt.connect(host, port, 60)
+        self._mqtt.connect(self._mqtt_host, self._mqtt_port, 60)
         self._mqtt.loop_forever()
 
     def publish_status(self):
@@ -114,6 +130,10 @@ class SesamiBluez:
     @property
     def logger(self) -> Logger:
         return self._logger
+
+    @property
+    def nuki_device(self) -> str:
+        return self._nuki_device
 
     @property
     def nuki_lock(self) -> NukiLockState:
@@ -186,38 +206,43 @@ def main():
         epilog='Belrog: you shall not pass!',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('device', help="nuki hexadecimal device id, e.g. 3807B7EC", type=str)
-    parser.add_argument('macaddr', help="bluetooth mac address to listen on, e.g. 'B8:27:EB:B9:2A:F0'", type=str)
-    parser.add_argument('-H', '--host',
-        help="hostname or IP address of the mqtt broker, e.g. 'mqtt.local'", default='localhost', type=str)
-    parser.add_argument('-p', '--port', help="mqtt broker port number", default=1883, type=int)
-    parser.add_argument('-U', '--username', help="mqtt authentication username", default=None, type=str)
-    parser.add_argument('-P', '--password', help="mqtt authentication secret", default=None, type=str)
-    parser.add_argument('-A', '--auth-file', help="secrets file name", default='/etc/nuki-sesami/auth.json', type=str)
-    parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
+    parser.add_argument('-p', '--prefix',
+                        help="runtime system root; e.g. '~/.local' or '/'",
+                        type=str, default=None)
+    parser.add_argument('-c', '--cpath',
+                        help="configuration path; e.g. '/etc/nuki-sesami' or '~/.config/nuki-sesami'",
+                        type=str, default=None)
+    parser.add_argument('-V', '--verbose',
+                        help="be verbose", action='store_true')
 
     args = parser.parse_args()
-    logpath = os.path.join(sys.prefix if is_virtual_env() else '/', 'var/log/nuki-sesami-bluez')
+    prefix = args.prefix or get_prefix()
+    cpath = args.cpath or get_config_path()
+    logpath = os.path.join(prefix, 'var/log/nuki-sesami-bluez')
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)
 
     logger = getlogger('nuki-sesami-bluez', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
-    logger.debug("args.device=%s", args.device)
-    logger.debug("args.macaddr=%s", args.macaddr)
-    logger.debug("args.host=%s", args.host)
-    logger.debug("args.port=%s", args.port)
-    logger.debug("args.username=%s", args.username)
-    logger.debug("args.password=***")
-    logger.debug("args.auth-file=%s", args.auth_file)
-    logger.debug("args.verbose=%s", args.verbose)
+    config = get_config(cpath)
+    clients = get_clients(cpath)
 
-    sesamibluez = SesamiBluez(logger, args.device, args.macaddr)
+    logger.debug("prefix          : %s", prefix)
+    logger.debug("config-path     : %s", cpath)
+    logger.info("nuki-device      : %s", config.nuki_device)
+    logger.info("mqtt-host        : %s", config.mqtt_host)
+    logger.info("mqtt-port        : %i", config.mqtt_port)
+    logger.info("mqtt-username    : %s", config.mqtt_username)
+    logger.info("bluetooth.macaddr: %s", config.bluetooth_macaddr)
+    logger.info("bluetooth.port   : %i", config.bluetooth_port)
+    logger.info("clients          : %i", len(clients))
+    for client in clients:
+        logger.debug("client           : mac(%s), pubkey(%s)", client.macaddr, client.pubkey)
 
-    username, password = get_username_password(args.auth_file, args.username, args.password)
+    sesamibluez = SesamiBluez(logger, config)
 
     try:
-        sesamibluez.activate(args.host, args.port, username, password)
+        sesamibluez.activate(config.mqtt_username, config.mqtt_password)
     except KeyboardInterrupt:
         logger.info("program terminated; keyboard interrupt")
     except Exception:
