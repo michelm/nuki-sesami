@@ -126,7 +126,7 @@ class SesamiBluez:
                 "opendoor": self._relay_opendoor
             }
         })
-        self.logger.info("(bluez) status=%s", status)
+        self.logger.debug("(bluez) status=%s", status)
 
     @property
     def logger(self) -> Logger:
@@ -230,10 +230,11 @@ def main():
 
     logger.debug("prefix          : %s", prefix)
     logger.debug("config-path     : %s", cpath)
-    logger.info("nuki-device      : %s", config.nuki_device)
-    logger.info("mqtt-host        : %s", config.mqtt_host)
-    logger.info("mqtt-port        : %i", config.mqtt_port)
-    logger.info("mqtt-username    : %s", config.mqtt_username)
+    logger.info("nuki.device      : %s", config.nuki_device)
+    logger.info("mqtt.host        : %s", config.mqtt_host)
+    logger.info("mqtt.port        : %i", config.mqtt_port)
+    logger.info("mqtt.username    : %s", config.mqtt_username)
+    logger.info("mqtt.password    : %s", '***')
     logger.info("bluetooth.macaddr: %s", config.bluetooth_macaddr)
     logger.info("bluetooth.port   : %i", config.bluetooth_port)
     logger.info("clients          : %i", len(clients))
