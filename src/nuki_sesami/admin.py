@@ -8,6 +8,7 @@ import subprocess
 import sys
 from logging import Logger
 
+from nuki_sesami.error import SesamiArgError
 from nuki_sesami.state import PushbuttonLogic
 from nuki_sesami.util import get_config_path, get_prefix, getlogger, is_virtual_env, run
 
@@ -57,10 +58,12 @@ def create_config_file(logger: Logger, args: argparse.Namespace) -> None:
     * args: argparse.Namespace, the command line arguments
     '''
     if not args.device:
-        raise Exception("missing nuki device identifer argument(-d | --device)")
+        a = ['-d', '--device']
+        raise SesamiArgError(a)
 
     if not args.blue_macaddr:
-        raise Exception("missing bluetooth mac (listen) address argument(-m | --blue-macaddr)")
+        a = ['-m', '--blue-macaddr']
+        raise SesamiArgError(a)
 
     fname = os.path.join(get_config_path(), 'config.json')
 
@@ -109,10 +112,12 @@ def create_auth_file(logger: Logger, username: str, password: str) -> None:
     * password: str, the MQTT password
     '''
     if not username:
-        raise Exception("missing mqtt username argument(-U | --username)")
+        a = ['-U', '--username']
+        raise SesamiArgError(a)
 
     if not password:
-        raise Exception("missing mqtt password argument(-P | --password)")
+        a = ['-P', '--password']
+        raise SesamiArgError(a)
 
     fname = os.path.join(get_config_path(), 'auth.json')
 
@@ -261,7 +266,8 @@ def main():
                         help="bluetooth mac address to listen on, e.g. 'B8:27:EB:B9:2A:F0'",
                         type=str, default=None)
     parser.add_argument('-b', '--blue-port', help="bluetooth broker port number", default=3, type=int)
-    parser.add_argument('-1', '--gpio-pushbutton', help="pushbutton door/hold open request (gpio)pin", default=2, type=int)
+    parser.add_argument('-1', '--gpio-pushbutton',
+                        help="pushbutton door/hold open request (gpio)pin", default=2, type=int)
     parser.add_argument('-2', '--gpio-opendoor', help="door open relay (gpio)pin", default=26, type=int)
     parser.add_argument('-3', '--gpio-openhold', help="door open and hold mode relay (gpio)pin", default=20, type=int)
     parser.add_argument('-4', '--gpio-openclose', help="door open/close mode relay (gpio)pin", default=21, type=int)

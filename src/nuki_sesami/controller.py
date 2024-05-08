@@ -8,10 +8,10 @@ import paho.mqtt.client as mqtt
 from gpiozero import Button, DigitalOutputDevice
 from paho.mqtt.reasoncodes import ReasonCode
 
+from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState
 from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, PushbuttonLogic, next_door_state
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
-from nuki_sesami.config import SesamiConfig, get_config
 
 
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
@@ -346,8 +346,8 @@ def main():
     logger.info("mqtt-username  : %s", config.mqtt_username)
     logger.info("gpio-pushbutton: %s", config.gpio_pushbutton)
     logger.info("gpio-opendoor  : %s", config.gpio_opendoor)
-    logger.info("gpio-openhold  : %s", config._gpio_openhold_mode)
-    logger.info("gpio-openclose : %s", config._gpio_openclose_mode)
+    logger.info("gpio-openhold  : %s", config.gpio_openhold_mode)
+    logger.info("gpio-openclose : %s", config.gpio_openclose_mode)
     logger.info("pushbutton     : %s", config.pushbutton.name)
 
     if config.pushbutton == PushbuttonLogic.open:

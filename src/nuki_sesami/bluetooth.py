@@ -8,11 +8,11 @@ from typing import Any
 import paho.mqtt.client as mqtt
 from paho.mqtt.reasoncodes import ReasonCode
 
+from nuki_sesami.clients import get_clients
+from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
 from nuki_sesami.state import DoorMode, DoorState
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
-from nuki_sesami.config import SesamiConfig, get_config
-from nuki_sesami.clients import SesamiClient, get_clients
 
 
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,

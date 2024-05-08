@@ -68,17 +68,15 @@ def run(cmd: list[str], logger: Logger, check: bool) -> None:
 def get_prefix() -> str:
     if os.geteuid() == 0:
         return '/'
-    elif is_virtual_env():
+    if is_virtual_env():
         return sys.prefix
-    else:
-        return os.path.join(os.path.expanduser('~'), '.local')
+    return os.path.join(os.path.expanduser('~'), '.local')
 
 
 def get_config_path() -> str:
     if os.geteuid() == 0:
         return '/etc/nuki-sesami'
-    elif is_virtual_env():
+    if is_virtual_env():
         return os.path.join(sys.prefix, 'etc', 'nuki-sesami')
-    else:
-        return os.path.join(os.path.expanduser('~'), '.config', 'nuki-sesami')
+    return os.path.join(os.path.expanduser('~'), '.config', 'nuki-sesami')
 
