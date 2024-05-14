@@ -4,29 +4,16 @@ from enum import IntEnum
 class DoorState(IntEnum):
     """Current (internal) door controller state
 
-    >>> int(DoorState.openclose1) == 0
+    >>> int(DoorState.closed) == 0
     True
-    >>> int(DoorState.openclose2) == 1
+    >>> int(DoorState.opened) == 1
     True
     >>> int(DoorState.openhold) == 2
     True
     """
-    openclose1      = 0 # pushbutton is pressed 3 times; default state
-    openclose2      = 1 # pushbutton is pressed once; request lock unlatched
-    openhold        = 2 # pushbutton is pressed twice; change to openhold mode when lock unlatched
-
-
-def next_door_state(state: DoorState) -> DoorState:
-    """Returns the next door state based on the current door state
-
-    >>> next_door_state(DoorState.openclose1).name
-    'openclose2'
-    >>> next_door_state(DoorState.openclose2).name
-    'openhold'
-    >>> next_door_state(DoorState.openhold).name
-    'openclose1'
-    """
-    return DoorState((state + 1) % len(DoorState))
+    closed      = 0 # door is closed or about to close
+    opened      = 1 # door is open(ing)
+    openhold    = 2 # door is open(ing) and will be held open
 
 
 class DoorMode(IntEnum):

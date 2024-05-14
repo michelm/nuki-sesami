@@ -15,6 +15,11 @@ from nuki_sesami.state import DoorMode, DoorState
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 
+# TODO:
+# this might be a good starting point for the bluetooth part of the project
+# https://github.com/sraodev/bluetooth-service-rfcomm-python/blob/master/bleServer.py
+#
+
 def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
                     rcode: ReasonCode, _props):
     '''The callback for when the client receives a CONNACK response from the server.

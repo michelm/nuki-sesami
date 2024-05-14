@@ -14,8 +14,11 @@ sudo apt-get install -y python3-pip
 sudo apt-get install -y python3-gpiozero
 sudo apt-get install -y python3-paho-mqtt
 
+# install bluetooth packages
+sudo apt-get install -y bluez python3-bluez
+
 # install mosquitto
-sudo apt install -y mosquitto mosquitto-clients
+sudo apt-get install -y mosquitto mosquitto-clients
 sudo systemctl enable mosquitto.service
 
 # create passwords file
