@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import importlib.metadata
 from logging import Logger
 from typing import Any
 
@@ -233,8 +234,9 @@ def main():
     config = get_config(cpath)
     clients = get_clients(cpath)
 
-    logger.debug("prefix          : %s", prefix)
-    logger.debug("config-path     : %s", cpath)
+    logger.info("version          : %sb", importlib.metadata.version('nuki-sesami'))
+    logger.info("prefix           : %s", prefix)
+    logger.info("config-path      : %s", cpath)
     logger.info("nuki.device      : %s", config.nuki_device)
     logger.info("mqtt.host        : %s", config.mqtt_host)
     logger.info("mqtt.port        : %i", config.mqtt_port)
