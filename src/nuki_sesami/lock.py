@@ -35,3 +35,14 @@ class NukiDoorsensorState(IntEnum):
     uncalibrated        = 16
     tampered            = 240
     unknown             = 255
+
+
+class NukiLockTrigger(IntEnum):
+    system_bluetooth    = 0
+    reserved            = 1
+    button              = 2
+    automatic           = 3 # e.g. time controlled
+    autolock            = 4
+    homekit             = 171
+    mqtt                = 172
+
