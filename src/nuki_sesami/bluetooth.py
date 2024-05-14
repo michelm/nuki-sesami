@@ -234,7 +234,7 @@ def main():
     config = get_config(cpath)
     clients = get_clients(cpath)
 
-    logger.info("version          : %sb", importlib.metadata.version('nuki-sesami'))
+    logger.info("version          : %s", importlib.metadata.version('nuki-sesami'))
     logger.info("prefix           : %s", prefix)
     logger.info("config-path      : %s", cpath)
     logger.info("nuki.device      : %s", config.nuki_device)

@@ -404,7 +404,7 @@ def main():
     logger = getlogger('nuki-sesami', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
     config = get_config(cpath)
 
-    logger.info("version        : %sb", importlib.metadata.version('nuki-sesami'))
+    logger.info("version        : %s", importlib.metadata.version('nuki-sesami'))
     logger.info("prefix         : %s", prefix)
     logger.info("config-path    : %s", cpath)
     logger.info("pushbutton     : %s", config.pushbutton.name)
