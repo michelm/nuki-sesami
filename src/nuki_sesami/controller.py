@@ -211,9 +211,9 @@ class ElectricDoor:
 
     def open(self):
         self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
-        self.logger.info("(relay) opendoor(1)")
+        self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 1, retain=True)
+        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 1, retain=False)
 
     def openhold(self):
         self.logger.info("(openhold) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
@@ -251,7 +251,9 @@ class ElectricDoor:
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
                          self.state.name, self.state, self.sensor.name, self.sensor, sensor.name, sensor)
         self.sensor = sensor
-
+        if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
+            self.state = DoorState.closed
+ 
     def on_door_request(self, request: DoorRequestState):
         '''Process a requested door state received from the MQTT broker.
 
