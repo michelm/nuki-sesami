@@ -30,8 +30,8 @@ source $HOME/$venv/bin/activate
 pip3 install $package
 
 echo "[INFO] removing old service log files"
-sudo rm /var/log/nuki-sesami/nuki-sesami.log
-sudo rm /var/log/nuki-sesami-bluez/nuki-sesami-bluez.log
+sudo rm -f /var/log/nuki-sesami/nuki-sesami.log
+sudo rm -f /var/log/nuki-sesami-bluez/nuki-sesami-bluez.log
 
 echo "[INFO] configuring and starting nuki-sesami services"
 nuki-sesami-admin setup \
