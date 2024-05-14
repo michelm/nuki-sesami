@@ -8,6 +8,7 @@
 import argparse
 import logging
 import os
+import importlib.metadata
 from logging import Logger
 from typing import Any
 
@@ -83,11 +84,21 @@ class PushButton(Button):
         self.userdata = userdata
 
 
+def pushbutton_held(button):
+    door = button.userdata
+    door.logger.info("(input) door (open/hold/close) push button %s is held", button.pin)
+
+
 def pushbutton_pressed(button):
     door = button.userdata
     door.logger.info("(input) door (open/hold/close) push button %s is pressed", button.pin)
     door.pushbutton_triggered(PUSHBUTTON_TRIGGER_UUID)
     door.on_pushbutton_pressed()
+
+
+def pushbutton_released(button):
+    door = button.userdata
+    door.logger.info("(input) door (open/hold/close) push button %s is released", button.pin)
 
 
 class ElectricDoor:
@@ -107,8 +118,10 @@ class ElectricDoor:
         self._mqtt.user_data_set(self) # pass instance of electricdoor
         self._mqtt_host = config.mqtt_host
         self._mqtt_port = config.mqtt_port
-        self._pushbutton = PushButton(config.gpio_pushbutton, self)
+        self._pushbutton = PushButton(config.gpio_pushbutton, self, bounce_time=1.0)
+        self._pushbutton.when_held = None
         self._pushbutton.when_pressed = pushbutton_pressed
+        self._pushbutton.when_released = None
         self._pushbutton_trigger = None
         self._opendoor = Relay(config.gpio_opendoor, False) # uses normally open relay (NO)
         self._openhold_mode = Relay(config.gpio_openhold_mode, False) # uses normally open relay (NO)
@@ -193,17 +206,17 @@ class ElectricDoor:
     def unlatch(self):
         if self.lock in [NukiLockState.unlatching]:
             return
-        self.logger.info("(unlatch) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info("(unlatch) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.lock_action(NukiLockAction.unlatch)
 
     def open(self):
-        self.logger.info("(open) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) opendoor(1)")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
         self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 1, retain=True)
 
     def openhold(self):
-        self.logger.info("(openhold) state={self.state.name}:{self.state}, lock={self.lock.name}:{self.lock}")
+        self.logger.info("(openhold) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) openhold(1), openclose(0)")
         self._openhold_mode.on()
         self._openclose_mode.off()
@@ -214,7 +227,8 @@ class ElectricDoor:
 
     def close(self):
         self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
-        self.lock_action(NukiLockAction.unlock)
+        if self.lock in [NukiLockState.locked, NukiLockState.locking]:
+            self.lock_action(NukiLockAction.unlock)
         self.logger.info("(relay) openhold(0), openclose(1)")
         self._openhold_mode.off()
         self._openclose_mode.on()
@@ -231,11 +245,6 @@ class ElectricDoor:
                 self.openhold()
             else:
                 self.open()
-        elif self.state == DoorState.opened and lock not in [NukiLockState.unlatched, NukiLockState.unlatching]:
-            # when door is in opened state it will be opened only briefly, we assume 
-            # the door has closed, or is closing, when the lock is not in unlatched state
-            self.state = DoorState.closed
-            self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 0, retain=True)
         self.lock = lock
 
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
@@ -393,6 +402,7 @@ def main():
     logger = getlogger('nuki-sesami', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
     config = get_config(cpath)
 
+    logger.info("version        : %sb", importlib.metadata.version('nuki-sesami'))
     logger.info("prefix         : %s", prefix)
     logger.info("config-path    : %s", cpath)
     logger.info("pushbutton     : %s", config.pushbutton.name)
