@@ -29,6 +29,10 @@ echo "[INFO] installing package $package in virtual environment $HOME/$venv"
 source $HOME/$venv/bin/activate
 pip3 install $package
 
+echo "[INFO] removing old service log files"
+sudo rm /var/log/nuki-sesami/nuki-sesami.log
+sudo rm /var/log/nuki-sesami-bluez/nuki-sesami-bluez.log
+
 echo "[INFO] configuring and starting nuki-sesami services"
 nuki-sesami-admin setup \
     -d $device \
@@ -38,6 +42,9 @@ nuki-sesami-admin setup \
     -P $password \
     -B $pushbutton \
     --verbose
+# force to the services to write to log files
+sudo systemctl restart nuki-sesami
+sudo systemctl restart nuki-sesami-bluez
 
 echo "[INFO] verify if systemd services are running"
 sudo systemctl status nuki-sesami
