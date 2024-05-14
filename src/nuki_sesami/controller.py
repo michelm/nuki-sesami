@@ -85,7 +85,7 @@ class PushButton(Button):
 
 def pushbutton_pressed(button):
     door = button.userdata
-    door.logger.info("(input) door (open/hold/close) push button %i is pressed", button.pin)
+    door.logger.info("(input) door (open/hold/close) push button %s is pressed", button.pin)
     door.pushbutton_triggered(PUSHBUTTON_TRIGGER_UUID)
     door.on_pushbutton_pressed()
 
@@ -301,11 +301,11 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
         return DoorState.openhold if state == DoorState.closed else DoorState.closed
 
     def on_pushbutton_pressed(self):
-        if not self._pushbutton_triggered:
+        if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
             self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
-        self._pushbutton_triggered = False
+        self._pushbutton_trigger = None
         self.state = self._next_door_state(self.state)
         self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
                          self.classname, self.state.name, self.state, self.lock.name, self.lock)
@@ -324,11 +324,11 @@ class ElectricDoorPushbuttonOpen(ElectricDoor):
         super().__init__(logger, config)
 
     def on_pushbutton_pressed(self):
-        if not self._pushbutton_triggered:
+        if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
             self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
-        self._pushbutton_triggered = False
+        self._pushbutton_trigger = None
         self.state = DoorState.opened
         self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
                          self.classname, self.state.name, self.state, self.lock.name, self.lock)
@@ -349,11 +349,11 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
         return DoorState((state + 1) % len(DoorState))
 
     def on_pushbutton_pressed(self):
-        if not self._pushbutton_triggered:
+        if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
             self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
-        self._pushbutton_triggered = False
+        self._pushbutton_trigger = None
         self.state = self._next_door_state(self.state)
         self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
                          self.classname, self.state.name, self.state, self.lock.name, self.lock)

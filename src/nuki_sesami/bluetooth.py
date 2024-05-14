@@ -81,7 +81,7 @@ class SesamiBluez:
         self._nuki_device = config.nuki_device
         self._nuki_lock = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
-        self._door_state = DoorState.openclose1
+        self._door_state = DoorState.closed
         self._door_mode = DoorMode.openclose
         self._relay_openclose = False
         self._relay_openhold = False
