@@ -4,13 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuki-sesami"
-version = "1.9.2"
+version = "1.9.3"
 authors = [
     { name = "Michel Mooij", email = "michel.mooij7@gmail.com" }
 ]
 description = "Open an electric door using Nuki smartlock status"
 readme = "README.md"
 dependencies = [
+    "aiomqtt>=2.1.0",
     "paho-mqtt>=2.0.0",
     "gpiozero>=2.0.1"
 ]

@@ -1,6 +1,10 @@
 # Nuki Sesami
 
-Open an electric door equipped with an _Nuki 3.0 Pro_ smart lock.
+Open (and hold) an electric door equipped with an _Nuki 3.0 Pro_ smart lock using a pushbutton and/or a smartphone using the _Nuki Sesami_ app.
+
+## Overview
+
+TODO: add system overview, components and general functions.
 
 ## Requirements
 
@@ -12,36 +16,115 @@ The following components are required when using this package:
 - [Waveshare RPi relay board](https://www.waveshare.com/wiki/RPi_Relay_Board) (or similar)
 - **mqtt** broker [mosquitto](https://mosquitto.org/), running on the same _Raspberry Pi_ board
 - Pushbutton connected to the relay board
+- Android (**v11+**) smartphone with the _Nuki Sesami_ app installed
 
 ## Installation and setup
 
-The package can be installed on the _Raspberry PI_ board as per usual:
+The package can be installed on the _Raspberry PI_ board using following commands:
 
 ```bash
+sudo apt update
+sudo apt-get install -y python3-pip python3-gpiozero python3-bluez pi-bluetooth
+python3 -m venv --system-site-packages $HOME/nuki-sesami
+source $HOME/nuki-sesami/bin/activate
 pip3 install nuki-sesami
 ```
 
-Installation and configuration of the **mosquitto** broker:
-    
+In order for **nuki-sesami** to be able to communicate with the _Nuki_ smart lock, a _Mosquitto_ broker must be running and configured. The bash script below can be used to install and configure the _Mosquitto_ broker (on the same _Raspberry Pi_ board):
+
 ```bash
+#!/bin/bash
+#
+# Example script to setup a Mosquitto broker on a fresh RaspberryPi.
+#
+set -e -o pipefail
+
+echo "[INFO] install packages and enable systemd service"
 sudo apt update
-sudo apt install mosquitto
-sudo systemctl enable mosquitto
-mosquitto_passwd /etc/mosquitto/passwd nuki <secret1>
-mosquitto_passwd /etc/mosquitto/passwd sesami <secret2>
+sudo apt-get install -y mosquitto mosquitto-clients
+sudo systemctl enable mosquitto.service
+
+echo "[INFO] create passwords file"
+sudo touch /etc/mosquitto/passwords
+echo "nuki:secret1" | sudo tee -a /etc/mosquitto/passwords
+echo "sesami:secret2" | sudo tee -a /etc/mosquitto/passwords
+read -p "change passwords in /etc/mosquitto/passwords, press enter when done"
+sudo mosquitto_passwd -U /etc/mosquitto/passwords
+
+echo "[INFO] configure mosquitto; disallow anonymous access, set path to passwords file"
+echo "listener 1883" | sudo tee -a /etc/mosquitto/mosquitto.conf
+echo "allow_anonymous false" | sudo tee -a /etc/mosquitto/mosquitto.conf
+echo "password_file /etc/mosquitto/passwords" | sudo tee -a /etc/mosquitto/mosquitto.conf
+sudo systemctl restart mosquitto.service
+
+echo "[INFO] verify if systemd services are running"
+sudo systemctl status mosquitto.service
 ```
 
-Ensure **mqtt** is enabled and running on the Nuki Smart Lock using the smartphone app.
-Use the same credentials as above for the nuki user.
+Once the _Mosquitto_ broker is running, the _Nuki_ smart lock can be configured to communicate with the _Mosquitto_ **mqtt** broker using the _Nuki Sesami_ app running on your smartphone:
 
-Activate **nuki-sesami** as systemd service:
+- Go to the setting of your smart lock, by pressing _Settings_ in the lower right of the screen
+- Press _Features & Configuration_ and select the _MQTT_ feature
+- Enable the _MQTT_ feature and enter the following settings:
+  - **Host name**: hostname of the _Raspberry Pi_ board running the _Mosquitto_ broker
+  - **User name**: nuki
+  - **Password**: _nuki-password_
+  - **Auto discovery**: on
+  - **Allow locking**: on
+
+Verify the _Nuki_ smart lock is able to communicate with the _Mosquitto_ broker by using the following command on the _Raspberry Pi_ board:
 
 ```bash
-sudo nuki-sesami-systemd %USER <nuki-device-id> -H <mqtt-broker-hostname> -U sesami -P <secret2>
+mosquitto_sub -h <mqtt-broker-hostname> -p 1883 -u sesami -P <sesami-password> -t nuki/DEVID/state
 ```
 
-In the _BATS_ programming menu of the ERREKA door controller ensure the external switch for manual changing the operating mode
-is activated:
+Where **DEVID** is the hexadecimal device ID; e.g. **3807B7EC**, of the _Nuki_ smart lock. The device ID can be found in the _Nuki_ app under _Settings_ > _Features & Configuration_ > _General_.
+
+Next step is to configure and start the _Nuki Sesami_ systemd services, as presented in the example below:
+
+```bash
+device=${NUKI_SESAMI_DEVICE:-'3807B7EC'}
+host=${NUKI_SESAMI_HOST:-'raspi-door'}
+macaddr=${NUKI_SESAMI_BLUE_MACADDR:-'B8:27:EB:B9:2A:F0'}
+username=${NUKI_SESAMI_USERNAME:-'sesami'}
+password=${NUKI_SESAMI_PASSWORD}
+pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
+
+nuki-sesami-admin setup \
+    -d $device \
+    -H $host \
+    -m $macaddr \
+    -U $username \
+    -P $password \
+    -B $pushbutton \
+    --verbose
+
+sudo systemctl restart nuki-sesami
+sudo systemctl restart nuki-sesami-bluez
+```
+
+Next pair all smartphones with the _Nuki Sesami_ app to the _Raspberry Pi_ board running the _Nuki Sesami_ services:
+
+- Lookup the bluetooth address and name of your smartphone
+- Ensure bluetooth is running the _Raspberry pi_ board:
+
+  - `sudo systemctl status bluetooth.service`
+
+- Pair the smartphone with the _Raspberry Pi_ board:
+
+  - `sudo bluetoothctl`
+  - `power on`
+  - `scan on`
+  - ensure the smartphone's bluetooth address is listed
+  - `scan off`
+  - `pair <bluetooth-address>`
+  - `trust <bluetooth-address>`
+  - `scan on`
+
+Repeat steps above for all smartphones that need to be paired with the _Raspberry Pi_ board.
+
+Final step is to configure the _ERREKA Smart Evolution Pro_ electric door controller to operate the electric door as per the _Nuki_ smart lock state.
+In the _BATS_ programming menu of the ERREKA door controller ensure the external switch for manual changing the operating mode is activated:
 
 - Function **FC01** == OFF, the door will be in _open/close_ mode when switch is in position **I**
 - Function **FC07** == ON, the door will be in _open and hold_ mode when switch is in position **II**
@@ -50,7 +133,7 @@ Use wiring connection as depicted in the diagram below:
 
 ![nuki-sesami-wiring](https://raw.githubusercontent.com/michelm/nuki-sesami/master/nuki-raspi-door-erreka.png)
 
-## Usage
+## Door controller operation
 
 Once the system has been setup as described above, the smartlock can be operated as per usual using the _Nuki_ smartphone app
 and/or other _Nuki_ peripherals; like for instance the _Nuki Fob_.

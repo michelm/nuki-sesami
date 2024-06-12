@@ -39,7 +39,7 @@ def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
 
 
 def run(cmd: list[str], logger: Logger, check: bool) -> None:
-    '''Runs a command and reirects stdout and stderr to the logger.
+    '''Runs a command and redirects stdout and stderr to the logger.
 
     Throws a subprocess.CalledProcessError when check is True and the command
     fails.
