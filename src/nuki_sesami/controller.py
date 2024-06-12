@@ -8,13 +8,13 @@
 import argparse
 import logging
 import os
+import asyncio
 import importlib.metadata
 from logging import Logger
-from typing import Any
 
-import paho.mqtt.client as mqtt
+import aiomqtt
+
 from gpiozero import Button, DigitalOutputDevice
-from paho.mqtt.reasoncodes import ReasonCode
 
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState
@@ -25,53 +25,53 @@ from nuki_sesami.util import get_config_path, get_prefix, getlogger
 PUSHBUTTON_TRIGGER_UUID = '09c69301-d115-4c3d-b614-b32bac1cf120'
 
 
-def mqtt_on_connect(client: mqtt.Client, userdata: Any, flags: mqtt.ConnectFlags,
-                    rcode: ReasonCode, _props):
-    '''The callback for when the client receives a CONNACK response from the server.
-
-    Allways subscribes to topics ensuring subscriptions will be renwed on reconnect.
-    '''
-    door = userdata
-
-    if rcode.is_failure:
-        door.logger.error("(mqtt) connect failed; rcode=%r, flags=%r", rcode, flags)
-        return
-
-    door.logger.info("(mqtt) connected; rcode=%r, flags=%r", rcode, flags)
-    client.subscribe(f"nuki/{door.nuki_device}/state")
-    client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
-    client.publish(f"sesami/{door.nuki_device}/state", int(door.state), retain=True) # internal state (debugging)
-    client.publish(f"sesami/{door.nuki_device}/mode", int(door.mode), retain=True)
-    client.publish(f"sesami/{door.nuki_device}/relay/openhold", int(door.mode == DoorMode.openhold), retain=True)
-    client.publish(f"sesami/{door.nuki_device}/relay/openclose", int(door.mode != DoorMode.openhold), retain=True)
-    client.publish(f"sesami/{door.nuki_device}/relay/opendoor", 0)
-    client.subscribe(f"sesami/{door.nuki_device}/request/state") # == DoorRequestState
+async def mqtt_subscribe_nuki_state(client: aiomqtt.Client, door):
+    await client.subscribe(f"nuki/{door.nuki_device}/state")
+    async for msg in client.messages:
+        state = NukiLockState(int(str(msg.payload)))
+        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
+        door.on_lock_state(state)
 
 
-def mqtt_on_message(_client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
-    '''The callback for when a PUBLISH message of Nuki smart lock state is received.
-    '''
-    door = userdata
-    try:
-        if msg.topic == f"nuki/{door.nuki_device}/state":
-            lock = NukiLockState(int(msg.payload))
-            door.logger.info("(mqtt) topic=%s, lock=%s:%i", msg.topic, lock.name, int(lock))
-            door.on_lock_state(lock)
-        elif msg.topic == f"nuki/{door.nuki_device}/doorsensorState":
-            sensor = NukiDoorsensorState(int(msg.payload))
-            door.logger.info("(mqtt) topic=%s, sensor=%s:%i", msg.topic, sensor.name, int(sensor))
-            door.on_doorsensor_state(sensor)
-        elif msg.topic == f"sesami/{door.nuki_device}/request/state":
-            request = DoorRequestState(int(msg.payload))
-            door.logger.info("(mqtt) topic=%s, request=%s:%i", msg.topic, request.name, int(request))
-            door.on_door_request(request)
-        else:
-            door.logger.info("(mqtt) topic=%s, payload=%r, type=%s",
-                            msg.topic, msg.payload, type(msg.payload))
-    except Exception:
-        door.logger.exception("(mqtt) topic=%s, payload=%s, payload_type=%s, payload_length=%i",
-            msg.topic, msg.payload, type(msg.payload), len(msg.payload)
-        )
+async def mqtt_subscribe_nuki_doorsensor_state(client: aiomqtt.Client, door):
+    await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
+    async for msg in client.messages:
+        state = NukiDoorsensorState(int(str(msg.payload)))
+        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
+        door.on_doorsensor_state(state)
+
+
+async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction):
+    topic = f"nuki/{device}/lockAction"
+    logger.info('[mqtt] publish %s=%s:%i (retain)', topic, action.name, action.value)
+    await client.publish(topic, action.value, retain=True)
+
+
+async def mqtt_subscribe_sesami_request_state(client: aiomqtt.Client, door):
+    await client.subscribe(f"sesami/{door.nuki_device}/request/state")
+    async for msg in client.messages:
+        state = DoorRequestState(int(str(msg.payload)))
+        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
+        door.on_door_request(state)
+
+
+async def mqtt_publish_sesami_state(client: aiomqtt.Client, device: str, logger: Logger, state: DoorState):
+    topic = f"sesami/{device}/state"
+    logger.info('[mqtt] publish %s=%s:%i (retain)', topic, state.name, state.value)
+    await client.publish(topic, state.value, retain=True)
+
+
+async def mqtt_publish_sesami_mode(client: aiomqtt.Client, device: str, logger: Logger, state: DoorMode):
+    topic = f"sesami/{device}/mode"
+    logger.info('[mqtt] publish %s=%s:%i (retain)', topic, state.name, state.value)
+    await client.publish(topic, state.value, retain=True)
+
+
+async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, name: str, logger: Logger, state: int, retain=True):
+    topic = f"sesami/{device}/relay/{name}"
+    logger.info('[mqtt] publish %s=%i (retain=%s)', topic, state, retain)
+    await client.publish(topic, state, retain=retain)
+
 
 class Relay(DigitalOutputDevice):
     def __init__(self, pin, active_high):
@@ -112,12 +112,6 @@ class ElectricDoor:
         self._nuki_device = config.nuki_device
         self._nuki_state = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
-        self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self._mqtt.on_connect = mqtt_on_connect
-        self._mqtt.on_message = mqtt_on_message
-        self._mqtt.user_data_set(self) # pass instance of electricdoor
-        self._mqtt_host = config.mqtt_host
-        self._mqtt_port = config.mqtt_port
         self._pushbutton = PushButton(config.gpio_pushbutton, self, bounce_time=1.0)
         self._pushbutton.when_held = None
         self._pushbutton.when_pressed = pushbutton_pressed
@@ -127,25 +121,44 @@ class ElectricDoor:
         self._openhold_mode = Relay(config.gpio_openhold_mode, False) # uses normally open relay (NO)
         self._openclose_mode = Relay(config.gpio_openclose_mode, False) # uses normally open relay (NO)
         self._state = DoorState.closed
+        self._clients = [] # list of connected bluetooth clients
+        self._background_tasks = set()
 
-    def activate(self, username: str, password: str):
-        '''Activates the electric door logic.
+    def _asyncio_schedule(self, coroutine):
+        '''Wraps the coroutine into a task and schedules its execution
 
-        Initializes GPIO to pins to default state, connects to MQTT broker and
-        subscribes to nuki smartlock topics.
+        The task will be added to the set of background tasks.
+        This creates a strong reference.
 
-        Parameters:
-        * username: MQTT username
-        * password: MQTT password
+        To prevent keeping references to finished tasks forever,
+        the task removes its own reference from the set of background tasks
+        after completion.
         '''
+        task = asyncio.create_task(coroutine)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    def activate(self, client: aiomqtt.Client):
+        '''Activates the electric door logic
+
+        Initializes GPIO to pins to default state, publishes initial (relay) states
+        and modes on MQTT.
+        '''
+        self._mqtt = client
         self.logger.info("(relay) opendoor(0), openhold(0), openclose(1)")
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
-        if username and password:
-            self._mqtt.username_pw_set(username, password)
-        self._mqtt.connect(self._mqtt_host, self._mqtt_port, 60)
-        self._mqtt.loop_forever()
+
+        for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
+            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+            
+        self._asyncio_schedule(mqtt_publish_sesami_state(
+            self._mqtt, self.nuki_device, self.logger, self.state))
+
+        self._asyncio_schedule(mqtt_publish_sesami_mode(
+            self._mqtt, self.nuki_device, self.logger, self.mode))
 
     @property
     def classname(self) -> str:
@@ -185,7 +198,8 @@ class ElectricDoor:
             return
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
         self._state = state
-        self._mqtt.publish(f"sesami/{self.nuki_device}/state", int(state), retain=True)
+        self._asyncio_schedule(mqtt_publish_sesami_state(
+            self._mqtt, self.nuki_device, self.logger, state))
 
     @property
     def mode(self) -> DoorMode:
@@ -201,7 +215,8 @@ class ElectricDoor:
 
     def lock_action(self, action: NukiLockAction):
         self.logger.info("(lock) request action=%s:%i", action.name, int(action))
-        self._mqtt.publish(f"nuki/{self.nuki_device}/lockAction", int(action))
+        self._asyncio_schedule(mqtt_publish_nuki_lock_action(
+            self._mqtt, self.nuki_device, self.logger, action))
 
     def unlatch(self):
         if self.lock in [NukiLockState.unlatching]:
@@ -213,17 +228,19 @@ class ElectricDoor:
         self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 1, retain=False)
+        self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+            self._mqtt, self.nuki_device, 'opendoor', self.logger, 1, retain=False))
 
     def openhold(self):
         self.logger.info("(openhold) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) openhold(1), openclose(0)")
         self._openhold_mode.on()
         self._openclose_mode.off()
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/openhold", 1, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/openclose", 0, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 0, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/mode", int(DoorMode.openhold), retain=True)
+        for name, state in [('opendoor', 0), ('openhold', 1), ('openclose', 0)]:
+            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+        self._asyncio_schedule(mqtt_publish_sesami_mode(
+            self._mqtt, self.nuki_device, self.logger, DoorMode.openhold))
 
     def close(self):
         self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
@@ -232,10 +249,11 @@ class ElectricDoor:
         self.logger.info("(relay) openhold(0), openclose(1)")
         self._openhold_mode.off()
         self._openclose_mode.on()
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/openhold", 0, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/openclose", 1, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/relay/opendoor", 0, retain=True)
-        self._mqtt.publish(f"sesami/{self.nuki_device}/mode", int(DoorMode.openclose), retain=True)
+        for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
+            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+        self._asyncio_schedule(mqtt_publish_sesami_mode(
+            self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
     def on_lock_state(self, lock: NukiLockState):
         self.logger.info("(lock_state) state=%s:%i, lock=%s:%i -> %s:%i",
@@ -376,6 +394,22 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             pass # no action here
 
 
+async def activate(logger: Logger, config):
+    if config.pushbutton == PushbuttonLogic.open:
+        door = ElectricDoorPushbuttonOpen(logger, config)
+    elif config.pushbutton == PushbuttonLogic.toggle:
+        door = ElectricDoorPushbuttonToggle(logger, config)
+    else:
+        door = ElectricDoorPushbuttonOpenHold(logger, config)
+
+    async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port, 
+            username=config.mqtt_username, password=config.mqtt_password) as client:
+        door.activate(client)
+        await mqtt_subscribe_nuki_state(client, door)
+        await mqtt_subscribe_nuki_doorsensor_state(client, door)
+        await mqtt_subscribe_sesami_request_state(client, door)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='nuki-sesami',
@@ -418,15 +452,8 @@ def main():
     logger.info("gpio.openhold  : %s", config.gpio_openhold_mode)
     logger.info("gpio.openclose : %s", config.gpio_openclose_mode)
 
-    if config.pushbutton == PushbuttonLogic.open:
-        door = ElectricDoorPushbuttonOpen(logger, config)
-    elif config.pushbutton == PushbuttonLogic.toggle:
-        door = ElectricDoorPushbuttonToggle(logger, config)
-    else:
-        door = ElectricDoorPushbuttonOpenHold(logger, config)
-
     try:
-        door.activate(config.mqtt_username, config.mqtt_password)
+        asyncio.run(activate(logger, config))
     except KeyboardInterrupt:
         logger.info("program terminated; keyboard interrupt")
     except Exception:
