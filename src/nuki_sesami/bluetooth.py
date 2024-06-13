@@ -52,7 +52,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self.logger.info('[bluez] client disconnected {}'.format(exc))
         self._clients = [c for c in self._clients if not c.is_closing()]
 
-    def _asyncio_schedule(self, coroutine):
+    def run_coroutine(self, coroutine):
         '''Wraps the coroutine into a task and schedules its execution
 
         The task will be added to the set of background tasks.
@@ -66,7 +66,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
-    def _process_request(self, request):
+    def process_request(self, request):
         if not request:
             return
 
@@ -75,7 +75,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
             if req["method"] == "set" and "door_request_state" in req["params"]:
                 state = DoorRequestState(req["params"]["door_request_state"])
                 self.logger.info('[bluez] publish door request state: {!r}'.format(state))
-                self._asyncio_schedule(mqtt_publish_sesami_request_state(self._mqtt, self, state))                
+                self.run_coroutine(mqtt_publish_sesami_request_state(self._mqtt, self, state))                
         except Exception as e:
             self.logger.error('[bluez] failed to process request: %s', e)
 
@@ -84,7 +84,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self.logger.debug('[bluez] data received: {!r}'.format(msg))
         try:
             for m in [s for s in msg.split('\n') if s]:
-                self._process_request(m)
+                self.process_request(m)
         except Exception as e:
             self.logger.error('[bluez] failed to parse message: %s', e)
 

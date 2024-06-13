@@ -10,6 +10,7 @@ import logging
 import os
 import asyncio
 import importlib.metadata
+import threading
 from logging import Logger
 
 import aiomqtt
@@ -89,9 +90,7 @@ class ElectricDoor:
         self._nuki_state = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
         self._pushbutton = PushButton(config.gpio_pushbutton, self, bounce_time=1.0)
-        self._pushbutton.when_held = None
         self._pushbutton.when_pressed = pushbutton_pressed
-        self._pushbutton.when_released = None
         self._pushbutton_trigger = None
         self._opendoor = Relay(config.gpio_opendoor, False) # uses normally open relay (NO)
         self._openhold_mode = Relay(config.gpio_openhold_mode, False) # uses normally open relay (NO)
@@ -100,7 +99,7 @@ class ElectricDoor:
         self._clients = [] # list of connected bluetooth clients
         self._background_tasks = set()
 
-    def _asyncio_schedule(self, coroutine):
+    def run_coroutine(self, coroutine):
         '''Wraps the coroutine into a task and schedules its execution
 
         The task will be added to the set of background tasks.
@@ -109,31 +108,39 @@ class ElectricDoor:
         To prevent keeping references to finished tasks forever,
         the task removes its own reference from the set of background tasks
         after completion.
-        '''
-        task = asyncio.create_task(coroutine)
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
 
-    def activate(self, client: aiomqtt.Client):
+        When called from a thread running outside of the event loop context
+        it is scheduled using asyncio.run_coroutine_threadsafe
+        '''
+        try:
+            _ = asyncio.get_running_loop()
+            task = asyncio.create_task(coroutine)
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+        except RuntimeError:
+            asyncio.run_coroutine_threadsafe(coroutine, self.loop)
+
+    def activate(self, client: aiomqtt.Client, loop: asyncio.AbstractEventLoop):
         '''Activates the electric door logic
 
         Initializes GPIO to pins to default state, publishes initial (relay) states
         and modes on MQTT.
         '''
         self._mqtt = client
+        self._loop = loop
         self.logger.info("(relay) opendoor(0), openhold(0), openclose(1)")
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
-            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+            self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
             
-        self._asyncio_schedule(mqtt_publish_sesami_state(
+        self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, self.state))
 
-        self._asyncio_schedule(mqtt_publish_sesami_mode(
+        self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, self.mode))
 
     @property
@@ -143,6 +150,10 @@ class ElectricDoor:
     @property
     def logger(self) -> Logger:
         return self._logger
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return self._loop
 
     @property
     def nuki_device(self) -> str:
@@ -174,7 +185,7 @@ class ElectricDoor:
             return
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
         self._state = state
-        self._asyncio_schedule(mqtt_publish_sesami_state(
+        self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, state))
 
     @property
@@ -191,7 +202,7 @@ class ElectricDoor:
 
     def lock_action(self, action: NukiLockAction):
         self.logger.info("(lock) request action=%s:%i", action.name, int(action))
-        self._asyncio_schedule(mqtt_publish_nuki_lock_action(
+        self.run_coroutine(mqtt_publish_nuki_lock_action(
             self._mqtt, self.nuki_device, self.logger, action))
 
     def unlatch(self):
@@ -204,7 +215,7 @@ class ElectricDoor:
         self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+        self.run_coroutine(mqtt_publish_sesami_relay_state(
             self._mqtt, self.nuki_device, 'opendoor', self.logger, 1, retain=False))
 
     def openhold(self):
@@ -213,9 +224,9 @@ class ElectricDoor:
         self._openhold_mode.on()
         self._openclose_mode.off()
         for name, state in [('opendoor', 0), ('openhold', 1), ('openclose', 0)]:
-            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+            self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
-        self._asyncio_schedule(mqtt_publish_sesami_mode(
+        self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openhold))
 
     def close(self):
@@ -226,9 +237,9 @@ class ElectricDoor:
         self._openhold_mode.off()
         self._openclose_mode.on()
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
-            self._asyncio_schedule(mqtt_publish_sesami_relay_state(
+            self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
-        self._asyncio_schedule(mqtt_publish_sesami_mode(
+        self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
     def on_lock_state(self, lock: NukiLockState):
@@ -393,7 +404,8 @@ async def activate(logger: Logger, config):
 
     async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port, 
             username=config.mqtt_username, password=config.mqtt_password) as client:
-        door.activate(client)
+        loop = asyncio.get_running_loop()
+        door.activate(client, loop)
         await client.subscribe(f"nuki/{door.nuki_device}/state")
         await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
         await client.subscribe(f"sesami/{door.nuki_device}/request/state")
