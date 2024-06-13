@@ -25,34 +25,10 @@ from nuki_sesami.util import get_config_path, get_prefix, getlogger
 PUSHBUTTON_TRIGGER_UUID = '09c69301-d115-4c3d-b614-b32bac1cf120'
 
 
-async def mqtt_subscribe_nuki_state(client: aiomqtt.Client, door):
-    await client.subscribe(f"nuki/{door.nuki_device}/state")
-    async for msg in client.messages:
-        state = NukiLockState(int(str(msg.payload)))
-        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
-        door.on_lock_state(state)
-
-
-async def mqtt_subscribe_nuki_doorsensor_state(client: aiomqtt.Client, door):
-    await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
-    async for msg in client.messages:
-        state = NukiDoorsensorState(int(str(msg.payload)))
-        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
-        door.on_doorsensor_state(state)
-
-
 async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction):
     topic = f"nuki/{device}/lockAction"
     logger.info('[mqtt] publish %s=%s:%i (retain)', topic, action.name, action.value)
     await client.publish(topic, action.value, retain=True)
-
-
-async def mqtt_subscribe_sesami_request_state(client: aiomqtt.Client, door):
-    await client.subscribe(f"sesami/{door.nuki_device}/request/state")
-    async for msg in client.messages:
-        state = DoorRequestState(int(str(msg.payload)))
-        door.logger.info("[mqtt] %s=%s:%i", msg.topic, state.name, state.value)
-        door.on_door_request(state)
 
 
 async def mqtt_publish_sesami_state(client: aiomqtt.Client, device: str, logger: Logger, state: DoorState):
@@ -394,6 +370,19 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             pass # no action here
 
 
+async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
+    async for msg in client.messages:
+        payload = msg.payload.decode()
+        topic = str(msg.topic)
+        door.logger.info('[mqtt] receive %s=%s', topic, payload)
+        if topic == f"nuki/{door.nuki_device}/state":
+            door.on_lock_state(NukiLockState(int(payload)))
+        elif topic == f"nuki/{door.nuki_device}/doorsensorState":
+            door.on_doorsensor_state(NukiDoorsensorState(int(payload)))
+        elif topic == f"sesami/{door.nuki_device}/request/state":
+            door.on_door_request(DoorRequestState(int(payload)))
+
+
 async def activate(logger: Logger, config):
     if config.pushbutton == PushbuttonLogic.open:
         door = ElectricDoorPushbuttonOpen(logger, config)
@@ -405,9 +394,10 @@ async def activate(logger: Logger, config):
     async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port, 
             username=config.mqtt_username, password=config.mqtt_password) as client:
         door.activate(client)
-        await mqtt_subscribe_nuki_state(client, door)
-        await mqtt_subscribe_nuki_doorsensor_state(client, door)
-        await mqtt_subscribe_sesami_request_state(client, door)
+        await client.subscribe(f"nuki/{door.nuki_device}/state")
+        await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
+        await client.subscribe(f"sesami/{door.nuki_device}/request/state")
+        await mqtt_receiver(client, door)
 
 
 def main():
