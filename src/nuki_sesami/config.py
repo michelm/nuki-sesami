@@ -11,8 +11,12 @@ class SesamiConfig:
         self._mqtt_port = config['mqtt']['port']
         self._mqtt_username = auth['username']
         self._mqtt_password = auth['password']
-        self._bluetooth_macaddr = config['bluetooth']['macaddr']
-        self._bluetooth_port = config['bluetooth']['port']
+
+        bluetooth = config['bluetooth']  
+        self._bluetooth_macaddr = bluetooth['macaddr']
+        self._bluetooth_channel = bluetooth['port']
+        self._bluetooth_backlog = bluetooth['backlog'] if 'backlog' in bluetooth else 10
+
         self._gpio_pushbutton = config['gpio']['pushbutton']
         self._gpio_opendoor = config['gpio']['opendoor']
         self._gpio_openhold_mode = config['gpio']['openhold-mode']
@@ -44,8 +48,12 @@ class SesamiConfig:
         return self._bluetooth_macaddr
 
     @property
-    def bluetooth_port(self) -> int:
-        return self._bluetooth_port
+    def bluetooth_channel(self) -> int:
+        return self._bluetooth_channel
+
+    @property
+    def bluetooth_backlog(self) -> int:
+        return self._bluetooth_backlog
 
     @property
     def gpio_pushbutton(self) -> int:

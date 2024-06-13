@@ -85,7 +85,8 @@ def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> 
         },
         'bluetooth': {
             'macaddr': args.blue_macaddr,
-            'port': args.blue_port
+            'port': args.blue_port,
+            'backlog': 10
         },
         'gpio': {
             'pushbutton': args.gpio_pushbutton,

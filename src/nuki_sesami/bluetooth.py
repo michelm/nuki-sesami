@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import asyncio
+import socket
 import importlib.metadata
 from logging import Logger
 
@@ -12,62 +13,6 @@ from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
 from nuki_sesami.state import DoorMode, DoorState, DoorRequestState
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
-
-
-async def mqtt_subscribe_nuki_state(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"nuki/{device}/state")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] nuki/%s/state=%s", device, msg.payload)
-        sesamibluez.nuki_lock = NukiLockState(int(msg.payload))
-
-
-async def mqtt_subscribe_nuki_doorsensor_state(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"nuki/{device}/doorsensorState")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] nuki/%s/doorsensorState=%s", device, msg.payload)
-        sesamibluez.nuki_doorsensor = NukiDoorsensorState(int(msg.payload))
-
-
-async def mqtt_subscribe_sesami_state(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"sesami/{device}/state")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] sesami/%s/state=%s", device, msg.payload)
-        sesamibluez.door_state = DoorState(int(msg.payload))
-
-
-async def mqtt_subscribe_sesami_mode(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"sesami/{device}/mode")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] sesami/%s/mode=%s", device, msg.payload)
-        sesamibluez.door_mode = DoorMode(int(msg.payload))
-
-
-async def mqtt_subscribe_sesami_relay_openhold(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"sesami/{device}/relay/openhold")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] sesami/%s/relay/openhold=%s", device, msg.payload)
-        sesamibluez.relay_openhold = msg.payload == "1"
-
-
-async def mqtt_subscribe_sesami_relay_openclose(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"sesami/{device}/relay/openclose")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] sesami/%s/relay/openclose=%s", device, msg.payload)
-        sesamibluez.relay_openclose = msg.payload == "1"
-
-
-async def mqtt_subscribe_sesami_relay_opendoor(client, sesamibluez):
-    device = sesamibluez.nuki_device
-    await client.subscribe(f"sesami/{device}/relay/opendoor")
-    async for msg in client.messages:
-        sesamibluez.logger.info("[mqtt] sesami/%s/relay/opendoor=%s", device, msg.payload)
-        sesamibluez.relay_opendoor = msg.payload == "1"
 
 
 async def mqtt_publish_sesami_request_state(client, sesamibluez, state: DoorRequestState):
@@ -143,9 +88,8 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         except Exception as e:
             self.logger.error('[bluez] failed to parse message: %s', e)
 
-    def publish_status(self, transport: asyncio.BaseTransport | None = None):
-        '''Publish status to a specific or all smartphones'''
-        status = json.dumps({
+    def get_status(self) -> str:
+        return json.dumps({
             "nuki": {
                 "lock": self._nuki_lock.value,
                 "doorsensor": self._nuki_doorsensor.value
@@ -160,13 +104,18 @@ class SesamiBluetoothAgent(asyncio.Protocol):
                 "opendoor": self._relay_opendoor
             }
         })
-        self.logger.debug("[bluez] publish_status=%s", status)
 
-        if transport is None:            
+    def publish_status(self, transport: asyncio.BaseTransport | None = None):
+        '''Publish status to a specific or all smartphones'''
+        if transport:
+            status = self.get_status()
+            self.logger.debug("[bluez] publish_status(N)=%s", status)
+            transport.write(status.encode())
+        elif self._clients:
+            status = self.get_status()
+            self.logger.debug("[bluez] publish_status(U%i)=%s", len(self._clients), status)
             for client in self._clients:
                 client.write(status.encode())
-        else:
-            transport.write(status.encode())
 
     def mqtt_client(self, client: aiomqtt.Client):
         self._mqtt = client
@@ -243,19 +192,49 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self.publish_status()
 
 
-async def activate(logger: Logger, config):
+async def mqtt_receiver(client: aiomqtt.Client, agent: SesamiBluetoothAgent):
+    async for msg in client.messages:
+        payload = msg.payload.decode()
+        topic = str(msg.topic)
+        agent.logger.info('[mqtt] receive %s=%s', topic, payload)
+        if topic == f"nuki/{agent.nuki_device}/state":
+            agent.nuki_lock = NukiLockState(int(payload))
+        elif topic == f"nuki/{agent.nuki_device}/doorsensorState":
+            agent.nuki_doorsensor = NukiDoorsensorState(int(payload))
+        elif topic == f"sesami/{agent.nuki_device}/state":
+            agent.door_state = DoorState(int(payload))
+        elif topic == f"sesami/{agent.nuki_device}/mode":
+            agent.door_mode = DoorMode(int(payload))
+        elif topic == f"sesami/{agent.nuki_device}/relay/openclose":
+            agent.relay_openclose = bool(int(payload))
+        elif topic == f"sesami/{agent.nuki_device}/relay/openhold":
+            agent.relay_openhold = bool(int(payload))
+        elif topic == f"sesami/{agent.nuki_device}/relay/opendoor":
+            agent.relay_opendoor = bool(int(payload))
+
+
+async def activate(logger: Logger, config: SesamiConfig):
     blueagent = SesamiBluetoothAgent(logger, config)
     loop = asyncio.get_running_loop()
-    blueserver = await loop.create_server(lambda: blueagent, '127.0.0.1', 8888)
+    sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+    sock.bind((config.bluetooth_macaddr, config.bluetooth_channel))
+    blueserver = await loop.create_server(lambda: blueagent, sock=sock, backlog=config.bluetooth_backlog)
 
     async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port, 
             username=config.mqtt_username, password=config.mqtt_password) as client:
         blueagent.mqtt_client(client)
-        await mqtt_subscribe_nuki_state(client, blueagent)
-        await mqtt_subscribe_nuki_doorsensor_state(client, blueagent)
-        await mqtt_subscribe_sesami_state(client, blueagent)
-        await mqtt_subscribe_sesami_mode(client, blueagent)
-        await blueserver.serve_forever()
+        device = blueagent.nuki_device
+        await client.subscribe(f"nuki/{device}/state")
+        await client.subscribe(f"nuki/{device}/doorsensorState")
+        await client.subscribe(f"sesami/{device}/state")
+        await client.subscribe(f"sesami/{device}/mode")
+        await client.subscribe(f"sesami/{device}/relay/openclose")
+        await client.subscribe(f"sesami/{device}/relay/openhold")
+        await client.subscribe(f"sesami/{device}/relay/opendoor")
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(mqtt_receiver(client, blueagent))
+            tg.create_task(blueserver.serve_forever())
 
 
 def main():
@@ -294,7 +273,8 @@ def main():
     logger.info("mqtt.username    : %s", config.mqtt_username)
     logger.info("mqtt.password    : %s", '***')
     logger.info("bluetooth.macaddr: %s", config.bluetooth_macaddr)
-    logger.info("bluetooth.port   : %i", config.bluetooth_port)
+    logger.info("bluetooth.channel: %i", config.bluetooth_channel)
+    logger.info("bluetooth.backlog: %i", config.bluetooth_backlog)
 
     try:
         asyncio.run(activate(logger, config))
