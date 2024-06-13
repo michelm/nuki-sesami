@@ -6,21 +6,25 @@ from nuki_sesami.state import PushbuttonLogic
 
 class SesamiConfig:
     def __init__(self, config: dict, auth: dict):
-        self._nuki_device = config['nuki']['device']
-        self._mqtt_host = config['mqtt']['host']
-        self._mqtt_port = config['mqtt']['port']
+        nuki = config['nuki']
+        self._nuki_device = nuki['device']
+
+        mqtt = config['mqtt']
+        self._mqtt_host = mqtt['host']
+        self._mqtt_port = mqtt['port']
         self._mqtt_username = auth['username']
         self._mqtt_password = auth['password']
 
-        bluetooth = config['bluetooth']  
+        bluetooth = config['bluetooth']
         self._bluetooth_macaddr = bluetooth['macaddr']
-        self._bluetooth_channel = bluetooth['port']
+        self._bluetooth_channel = bluetooth['channel']
         self._bluetooth_backlog = bluetooth['backlog'] if 'backlog' in bluetooth else 10
 
-        self._gpio_pushbutton = config['gpio']['pushbutton']
-        self._gpio_opendoor = config['gpio']['opendoor']
-        self._gpio_openhold_mode = config['gpio']['openhold-mode']
-        self._gpio_openclose_mode = config['gpio']['openclose-mode']
+        gpio = config['gpio']
+        self._gpio_pushbutton = gpio['pushbutton']
+        self._gpio_opendoor = gpio['opendoor']
+        self._gpio_openhold_mode = gpio['openhold-mode']
+        self._gpio_openclose_mode = gpio['openclose-mode']
         self._pushbutton = PushbuttonLogic[config['pushbutton']]
 
     @property

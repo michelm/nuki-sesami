@@ -6,6 +6,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import importlib.metadata
 from logging import Logger
 
 from nuki_sesami.error import SesamiArgError
@@ -294,8 +295,14 @@ def main():
                         type=str)
     parser.add_argument('-R', '--dryrun', help="dummy systemd installation", action='store_true')
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
+    parser.add_argument('-v', '--version', help="print version and exit", action='store_true')
 
     args = parser.parse_args()
+    version = importlib.metadata.version('nuki-sesami')
+    if args.version:
+        print(version)
+        sys.exit(0)
+
     prefix = get_prefix()
     cpath = args.cpath or get_config_path()
     logpath = os.path.join(prefix, 'var/log/nuki-sesami-setup')
@@ -304,6 +311,7 @@ def main():
         os.makedirs(logpath)
 
     logger = getlogger('nuki-sesami-setup', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
+    logger.debug("version           : %s", version)
     logger.debug("action            : %s", args.action)
     logger.debug("pushbutton        : %s", PushbuttonLogic[args.pushbutton].name)
     logger.debug("nuki.device       : %s", args.device)

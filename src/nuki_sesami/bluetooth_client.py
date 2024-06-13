@@ -38,15 +38,18 @@ async def send_requests(writer: asyncio.StreamWriter, logger: logging.Logger, ad
         await send_door_request(writer, DoorRequestState.close, addr, channel, logger)
 
 
-async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, addr: str, channel: int):
-    while True:
+async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, addr: str, channel: int, maxrecv: int):
+    n = maxrecv
+    c = 0
+    while (n < 0) or (c < n):
         data = await reader.read(1024)
         if not data:
             break
         logger.info('recv[%s, ch=%i] status(%s)', addr, channel, data.decode())
+        c += 1
 
 
-async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: int, test_door_requests: bool):
+async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: int, request: int, test_requests: bool, maxrecv: int):
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     sock.connect((addr, channel))
     reader, writer = await asyncio.open_connection(sock=sock)
@@ -58,14 +61,21 @@ async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: in
     tasks.add(task)
     task.add_done_callback(tasks.discard)
 
-    if test_door_requests:
+    if request:
+        task = asyncio.create_task(send_door_request(
+            writer, DoorRequestState(request), addr, channel, logger
+        ))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+
+    elif test_requests:
         task = asyncio.create_task(send_requests(
             writer, logger, addr, channel
         ))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
 
-    await receive_status(reader, logger, addr, channel)
+    await receive_status(reader, logger, addr, channel, maxrecv)
 
 
 def getlogger(name, level):
@@ -90,22 +100,41 @@ def main():
     parser.add_argument('-c', '--channel',
                         help="blueooth channel of the nuki-sesami device (raspberry-pi)",
                         type=int, default=None)
-
-    parser.add_argument('-t', '--test-door-requests',
+    parser.add_argument('-r', '--door-request',
+                        help="send door request (1=close, 2=open, 3=openhold)",
+                        type=int, default=0, choices=[1, 2, 3])
+    parser.add_argument('-t', '--test-requests',
                         help="test door requests (open, openhold, close)",
                         action='store_true')
+    parser.add_argument('-m', '--maxrecv',
+                        help="maximum number status messages to receive (-1 == infinite)",
+                        type=int, default=0)
+    parser.add_argument('-V', '--verbose',
+                        help="be verbose", action='store_true')
+    parser.add_argument('-v', '--version',
+                        help="print version and exit", action='store_true')
 
     args = parser.parse_args()
-    logger = getlogger('nuki-sesami-bluetest', logging.DEBUG)
 
-    logger.info("version          : %s", importlib.metadata.version('nuki-sesami'))
-    logger.info("bluetooth.macaddr: %s", args.addr)
-    logger.info("bluetooth.channel: %i", args.channel)
+    version = importlib.metadata.version('nuki-sesami')
+    if args.version:
+        print(version)
+        sys.exit(0)
+
+    level = logging.DEBUG if args.verbose else logging.INFO
+    logger = getlogger('nuki-sesami-bluetest', level)
+    logger.debug("version          : %s", version)
+    logger.debug("bluetooth.macaddr: %s", args.addr)
+    logger.debug("bluetooth.channel: %i", args.channel)
+    logger.debug("door_request     : %i", args.door_request)
+    logger.debug("test_requests    : %s", args.test_requests)
+    logger.debug("maxrecv          : %i", args.maxrecv)
 
     try:
-        asyncio.run(sesami_bluetooth_client(logger, args.addr, args.channel, args.test_door_requests))
+        asyncio.run(sesami_bluetooth_client(logger, 
+            args.addr, args.channel, args.door_request, args.test_requests, args.maxrecv))
     except KeyboardInterrupt:
-        logger.info("program terminated; keyboard interrupt")
+        logger.debug("program terminated; keyboard interrupt")
     except Exception:
         logger.exception("something went wrong, exception")
 

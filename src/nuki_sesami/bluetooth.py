@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 import asyncio
 import socket
 import importlib.metadata
@@ -252,8 +253,15 @@ def main():
                         type=str, default=None)
     parser.add_argument('-V', '--verbose',
                         help="be verbose", action='store_true')
+    parser.add_argument('-v', '--version',
+                        help="print version and exit", action='store_true')
 
     args = parser.parse_args()
+    version = importlib.metadata.version('nuki-sesami')
+    if args.version:
+        print(version)
+        sys.exit(0)
+
     prefix = args.prefix or get_prefix()
     cpath = args.cpath or get_config_path()
     logpath = os.path.join(prefix, 'var/log/nuki-sesami-bluez')
@@ -264,7 +272,7 @@ def main():
     logger = getlogger('nuki-sesami-bluez', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
     config = get_config(cpath)
 
-    logger.info("version          : %s", importlib.metadata.version('nuki-sesami'))
+    logger.info("version          : %s", version)
     logger.info("prefix           : %s", prefix)
     logger.info("config-path      : %s", cpath)
     logger.info("nuki.device      : %s", config.nuki_device)
