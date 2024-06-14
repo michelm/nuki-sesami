@@ -6,22 +6,20 @@
 # for more information.
 
 import argparse
+import asyncio
+import importlib.metadata
 import logging
 import os
 import sys
-import asyncio
-import importlib.metadata
 from logging import Logger
 
 import aiomqtt
-
 from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState
 from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, PushbuttonLogic
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
-
 
 PUSHBUTTON_TRIGGER_UUID = '09c69301-d115-4c3d-b614-b32bac1cf120'
 
@@ -44,7 +42,8 @@ async def mqtt_publish_sesami_mode(client: aiomqtt.Client, device: str, logger: 
     await client.publish(topic, state.value, retain=True)
 
 
-async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, name: str, logger: Logger, state: int, retain=True):
+async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, name: str,
+                                          logger: Logger, state: int, retain=True):
     topic = f"sesami/{device}/relay/{name}"
     logger.info('[mqtt] publish %s=%i (retain=%s)', topic, state, retain)
     await client.publish(topic, state, retain=retain)
@@ -142,7 +141,7 @@ class ElectricDoor:
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
-            
+
         self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, self.state))
 
@@ -201,7 +200,7 @@ class ElectricDoor:
     def pushbutton_triggered(self, uuid: str):
         '''Set by the pushbutton callback function, ensuring the pushbutton has been triggered
 
-        TODO: temporary solution, use until bug has been found triggering the pushbutton 
+        TODO: temporary solution, use until bug has been found triggering the pushbutton
         function.
         '''
         self._pushbutton_trigger = uuid
@@ -264,7 +263,7 @@ class ElectricDoor:
         self.sensor = sensor
         if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
             self.state = DoorState.closed
- 
+
     def on_door_request(self, request: DoorRequestState):
         '''Process a requested door state received from the MQTT broker.
 
@@ -304,7 +303,7 @@ class ElectricDoor:
 
     def on_pushbutton_pressed(self):
         if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
-            self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
+            self.logger.warning("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
         self._pushbutton_trigger = None
@@ -324,7 +323,7 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
-            self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
+            self.logger.warning("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
         self._pushbutton_trigger = None
@@ -347,7 +346,7 @@ class ElectricDoorPushbuttonOpen(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
-            self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
+            self.logger.warning("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
         self._pushbutton_trigger = None
@@ -372,7 +371,7 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
-            self.logger.warn("(%s.pushbutton_pressed) but not triggered!", self.classname)
+            self.logger.warning("(%s.pushbutton_pressed) but not triggered!", self.classname)
             return
 
         self._pushbutton_trigger = None
@@ -408,7 +407,7 @@ async def activate(logger: Logger, config):
     else:
         door = ElectricDoorPushbuttonOpenHold(logger, config)
 
-    async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port, 
+    async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port,
             username=config.mqtt_username, password=config.mqtt_password) as client:
         loop = asyncio.get_running_loop()
         door.activate(client, loop)

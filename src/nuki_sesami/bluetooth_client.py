@@ -1,10 +1,10 @@
-import sys
-import socket
-import json
-import asyncio
 import argparse
-import logging
+import asyncio
 import importlib.metadata
+import json
+import logging
+import socket
+import sys
 
 from nuki_sesami.state import DoorRequestState
 
@@ -16,7 +16,8 @@ async def send_alive(writer: asyncio.StreamWriter, addr: str, channel:int, logge
     await writer.drain()
 
 
-async def send_door_request(writer: asyncio.StreamWriter, state: DoorRequestState,addr: str, channel:int, logger: logging.Logger):
+async def send_door_request(writer: asyncio.StreamWriter, state: DoorRequestState, addr: str,
+                            channel:int, logger: logging.Logger):
     logger.info('send[%s, ch=%i] door_request(%s:%i)', addr, channel, state.name, state.value)
     msg = json.dumps({"jsonrpc": "2.0", "method": "set", "params": {"door_request_state":state.value}})
     writer.write(str(msg + '\n').encode())
@@ -49,7 +50,8 @@ async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, a
         c += 1
 
 
-async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: int, request: int, test_requests: bool, maxrecv: int):
+async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: int, request: int,
+                                  test_requests: bool, maxrecv: int):
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     sock.connect((addr, channel))
     reader, writer = await asyncio.open_connection(sock=sock)
@@ -131,7 +133,7 @@ def main():
     logger.debug("maxrecv          : %i", args.maxrecv)
 
     try:
-        asyncio.run(sesami_bluetooth_client(logger, 
+        asyncio.run(sesami_bluetooth_client(logger,
             args.addr, args.channel, args.door_request, args.test_requests, args.maxrecv))
     except KeyboardInterrupt:
         logger.debug("program terminated; keyboard interrupt")

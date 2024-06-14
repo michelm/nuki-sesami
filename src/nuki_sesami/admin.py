@@ -1,4 +1,5 @@
 import argparse
+import importlib.metadata
 import json
 import logging
 import os
@@ -6,7 +7,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import importlib.metadata
 from logging import Logger
 
 from nuki_sesami.error import SesamiArgError
@@ -44,8 +44,7 @@ def get_systemctl(dryrun: bool) -> list[str]:
         return ["echo", "/usr/bin/systemctl"]
     if os.geteuid() == 0:
         return ["systemctl"]
-    else:
-        return ["sudo", "systemctl"]
+    return ["sudo", "systemctl"]
 
 
 def get_systemd_service_fname(prefix: str, name: str) -> str:
