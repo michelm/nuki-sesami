@@ -10,7 +10,7 @@ An electric door somehow needs to receive trigger signals for it to be _opened_,
 
 The door will be _opened_ by the _Nuki Sesami_ service when the smart lock is _unlatched_ using the _Nuki Smartlock_ app. After a brief moment the door will close again.
 The door can also be  _opened_ **and** _held open_ by pressing a pushbutton connected to the _Raspberry Pi_ board on which the _Nuki Sesami_ service is running. When pressing this pushbutton again the door will be _closed_ again.
-Finally the door can be _opened_, _held open_ or _closed_ using the _Nuki Sesami_ smartphone app. Communication between the _Nuki Sesami_ service and the _Nuki 3.0_ msart lock is achived using the _mqtt_ protocol; e.g. by running a _Mosquitto_ (**mqtt**) broker on the _Raspberry Pi_ board.
+Finally the door can be _opened_, _held open_ or _closed_ using the _Nuki Sesami_ smartphone app. Communication between the _Nuki Sesami_ service and the _Nuki 3.0_ smart lock is achived using the _mqtt_ protocol; e.g. by running a _Mosquitto_ (**mqtt**) broker on the _Raspberry Pi_ board.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ The package can be installed on the _Raspberry PI_ board using following command
 
 ```bash
 sudo apt update
-sudo apt-get install -y python3-pip python3-gpiozero python3-bluez pi-bluetooth
+sudo apt-get install -y python3-pip python3-gpiozero bluez pi-bluetooth
 python3 -m venv --system-site-packages $HOME/nuki-sesami
 source $HOME/nuki-sesami/bin/activate
 pip3 install nuki-sesami
@@ -92,6 +92,8 @@ Next step is to configure and start the _Nuki Sesami_ systemd services, as prese
 device=${NUKI_SESAMI_DEVICE:-'3807B7EC'}
 host=${NUKI_SESAMI_HOST:-'raspi-door'}
 macaddr=${NUKI_SESAMI_BLUE_MACADDR:-'B8:27:EB:B9:2A:F0'}
+channel=${NUKI_SESAMI_BLUE_CHANNEL:-4}
+backlog=${NUKI_SESAMI_BLUE_BACKLOG:-10}
 username=${NUKI_SESAMI_USERNAME:-'sesami'}
 password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
@@ -100,6 +102,8 @@ nuki-sesami-admin setup \
     -d $device \
     -H $host \
     -m $macaddr \
+    -b $channel \
+    -n $backlog \
     -U $username \
     -P $password \
     -B $pushbutton \

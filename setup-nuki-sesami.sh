@@ -11,6 +11,8 @@ set -e -o pipefail
 device=${NUKI_SESAMI_DEVICE:-'3807B7EC'}
 host=${NUKI_SESAMI_HOST:-'raspi-door'}
 macaddr=${NUKI_SESAMI_BLUE_MACADDR:-'B8:27:EB:B9:2A:F0'}
+channel=${NUKI_SESAMI_BLUE_CHANNEL:-4}
+backlog=${NUKI_SESAMI_BLUE_BACKLOG:-10}
 username=${NUKI_SESAMI_USERNAME:-'sesami'}
 password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
@@ -38,6 +40,8 @@ nuki-sesami-admin setup \
     -d $device \
     -H $host \
     -m $macaddr \
+    -b $channel \
+    -n $backlog \
     -U $username \
     -P $password \
     -B $pushbutton \
