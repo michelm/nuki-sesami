@@ -50,6 +50,12 @@ async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, n
     await client.publish(topic, state, retain=retain)
 
 
+async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, device: str, logger: Logger):
+    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 1, retain=True)
+    await asyncio.sleep(1)
+    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
+
+
 class Relay(DigitalOutputDevice):
     def __init__(self, pin, active_high):
         super().__init__(pin, active_high=active_high)
@@ -215,8 +221,8 @@ class ElectricDoor:
         self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
-        self.run_coroutine(mqtt_publish_sesami_relay_state(
-            self._mqtt, self.nuki_device, 'opendoor', self.logger, 1, retain=False))
+        self.run_coroutine(mqtt_publish_sesami_relay_opendoor_blink(
+            self._mqtt, self.nuki_device, self.logger))
 
     def openhold(self):
         self.logger.info("(openhold) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)

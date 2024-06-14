@@ -29,7 +29,8 @@ class SesamiBluetoothAgent(asyncio.Protocol):
     Subscribes as client to MQTT eletrical door opener topics from 'Nuki Sesami'.
     Received door commands from smartphones are forwarded to the MQTT broker.
     '''
-    def __init__(self, logger: Logger, config: SesamiConfig):
+    def __init__(self, logger: Logger, config: SesamiConfig, version: str):
+        self._version = version
         self._logger = logger
         self._nuki_device = config.nuki_device
         self._nuki_lock = NukiLockState.undefined
@@ -103,7 +104,8 @@ class SesamiBluetoothAgent(asyncio.Protocol):
                 "openclose": self._relay_openclose,
                 "openhold": self._relay_openhold,
                 "opendoor": self._relay_opendoor
-            }
+            },
+            "version": self._version
         })
 
     def publish_status(self, transport: asyncio.BaseTransport | None = None):
@@ -214,8 +216,8 @@ async def mqtt_receiver(client: aiomqtt.Client, agent: SesamiBluetoothAgent):
             agent.relay_opendoor = bool(int(payload))
 
 
-async def activate(logger: Logger, config: SesamiConfig):
-    blueagent = SesamiBluetoothAgent(logger, config)
+async def activate(logger: Logger, config: SesamiConfig, version: str):
+    blueagent = SesamiBluetoothAgent(logger, config, version)
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     sock.bind((config.bluetooth_macaddr, config.bluetooth_channel))
@@ -285,7 +287,7 @@ def main():
     logger.info("bluetooth.backlog: %i", config.bluetooth_backlog)
 
     try:
-        asyncio.run(activate(logger, config))
+        asyncio.run(activate(logger, config, version))
     except KeyboardInterrupt:
         logger.info("program terminated; keyboard interrupt")
     except Exception:
