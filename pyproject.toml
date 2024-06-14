@@ -4,17 +4,18 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuki-sesami"
-version = "1.0.1"
+version = "1.9.6"
 authors = [
     { name = "Michel Mooij", email = "michel.mooij7@gmail.com" }
 ]
 description = "Open an electric door using Nuki smartlock status"
 readme = "README.md"
 dependencies = [
-    "paho-mqtt>=1.6.1",
-    "gpiozero>=1.6.2"
+    "aiomqtt>=2.1.0",
+    "paho-mqtt>=2.0.0",
+    "gpiozero>=2.0.1"
 ]
-requires-python = ">= 3.11"
+requires-python = ">= 3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -22,8 +23,10 @@ classifiers = [
 ]
 
 [project.scripts]
-nuki-sesami = "nuki_sesami.door_controller:main"
-nuki-sesami-systemd = "nuki_sesami.sesami_systemd:main"
+nuki-sesami = "nuki_sesami.controller:main"
+nuki-sesami-admin = "nuki_sesami.admin:main"
+nuki-sesami-bluez = "nuki_sesami.bluetooth:main"
+nuki-sesami-bluetest = "nuki_sesami.bluetooth_client:main"
 
 [project.urls]
 "Homepage" = "https://github.com/michelm/nuki-sesami"
