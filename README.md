@@ -6,7 +6,7 @@ Open (and hold) an electric door equipped with an _Nuki 3.0 Pro_ smart lock usin
 
 An electric door somehow needs to receive trigger signals for it to be _opened_, _closed_ or _held open_. The **Nuki Sesami** package can perform this logic for you when using an _ERREKA Smart Evolution Pro_ electric door controller in combination with an _Nuki 3.0 Pro_ smart lock.
 
-![nuki-sesami-wiring](nuki-sesami-overview.png)
+![nuki-sesami-wiring](https://raw.githubusercontent.com/michelm/nuki-sesami/master/nuki-sesami-overview.png)
 
 The door will be _opened_ by the _Nuki Sesami_ service when the smart lock is _unlatched_ using the _Nuki Smartlock_ app. After a brief moment the door will close again.
 The door can also be  _opened_ **and** _held open_ by pressing a pushbutton connected to the _Raspberry Pi_ board on which the _Nuki Sesami_ service is running. When pressing this pushbutton again the door will be _closed_ again.
