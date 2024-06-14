@@ -11,7 +11,7 @@ from logging import Logger
 
 from nuki_sesami.error import SesamiArgError
 from nuki_sesami.state import PushbuttonLogic
-from nuki_sesami.util import get_config_path, get_prefix, getlogger, is_virtual_env, run
+from nuki_sesami.util import get_config_path, get_prefix, getlogger, run
 
 SYSTEMD_TEMPLATE = '''[Unit]
 Description=%s
@@ -86,8 +86,8 @@ def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> 
         },
         'bluetooth': {
             'macaddr': args.blue_macaddr,
-            'port': args.blue_port,
-            'backlog': 10
+            'channel': args.blue_channel,
+            'backlog': args.blue_backlog
         },
         'gpio': {
             'pushbutton': args.gpio_pushbutton,
@@ -283,7 +283,8 @@ def main():
     parser.add_argument('-m', '--blue-macaddr',
                         help="bluetooth mac address to listen on, e.g. 'B8:27:EB:B9:2A:F0'",
                         type=str, default=None)
-    parser.add_argument('-b', '--blue-port', help="bluetooth broker port number", default=3, type=int)
+    parser.add_argument('-b', '--blue-channel', help="bluetooth agent listen channel", default=4, type=int)
+    parser.add_argument('-n', '--blue-backlog', help="bluetooth maximum number of clients", default=10, type=int)
     parser.add_argument('-1', '--gpio-pushbutton',
                         help="pushbutton door/hold open request (gpio)pin", default=2, type=int)
     parser.add_argument('-2', '--gpio-opendoor', help="door open relay (gpio)pin", default=26, type=int)
@@ -320,7 +321,8 @@ def main():
     logger.debug("mqtt.username     : %s", args.username)
     logger.debug("mqtt.password     : ***")
     logger.debug("bluetooth.macaddr : %s", args.blue_macaddr)
-    logger.debug("bluetooth.port    : %i", args.blue_port)
+    logger.debug("bluetooth.channel : %i", args.blue_channel)
+    logger.debug("bluetooth.backlog : %i", args.blue_backlog)
     logger.debug("gpio.pushbutton   : %s", args.gpio_pushbutton)
     logger.debug("gpio.opendoor     : %s", args.gpio_opendoor)
     logger.debug("gpio.openhold     : %s", args.gpio_openhold)
