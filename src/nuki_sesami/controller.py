@@ -30,6 +30,12 @@ async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, log
     await client.publish(topic, action.value, retain=True)
 
 
+async def mqtt_publish_sesami_version(client: aiomqtt.Client, device: str, logger: Logger, version: str):
+    topic = f"sesami/{device}/version"
+    logger.info('[mqtt] publish %s=%s (retain)', topic, version)
+    await client.publish(topic, version, retain=True)
+
+
 async def mqtt_publish_sesami_state(client: aiomqtt.Client, device: str, logger: Logger, state: DoorState):
     topic = f"sesami/{device}/state"
     logger.info('[mqtt] publish %s=%s:%i (retain)', topic, state.name, state.value)
@@ -89,8 +95,9 @@ class ElectricDoor:
     Subscribes as client to MQTT door status topic from 'Nuki 3.0 pro' smart lock. When the lock has been opened
     it will activate a relay, e.g. using the 'RPi Relay Board', triggering the electric door to open.
     '''
-    def __init__(self, logger: Logger, config: SesamiConfig):
+    def __init__(self, logger: Logger, config: SesamiConfig, version: str):
         self._logger = logger
+        self._version = version
         self._nuki_device = config.nuki_device
         self._nuki_state = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
@@ -141,6 +148,9 @@ class ElectricDoor:
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+            
+        self.run_coroutine(mqtt_publish_sesami_version(
+            self._mqtt, self.nuki_device, self.logger, self.version))
 
         self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, self.state))
@@ -155,6 +165,10 @@ class ElectricDoor:
     @property
     def logger(self) -> Logger:
         return self._logger
+    
+    @property
+    def version(self) -> str:
+        return self._version
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
@@ -315,8 +329,8 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
 
     When pressing the pushbutton the door will be opened and held open until the pushbutton is pressed again.
     '''
-    def __init__(self, logger: logging.Logger, config: SesamiConfig):
-        super().__init__(logger, config)
+    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
+        super().__init__(logger, config, version)
 
     def _next_door_state(self, state: DoorState) -> DoorState:
         return DoorState.openhold if state == DoorState.closed else DoorState.closed
@@ -341,8 +355,8 @@ class ElectricDoorPushbuttonOpen(ElectricDoor):
 
     When pressing the pushbutton the door will be opened for a few seconds after which it will be closed again.
     '''
-    def __init__(self, logger: logging.Logger, config: SesamiConfig):
-        super().__init__(logger, config)
+    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
+        super().__init__(logger, config, version)
 
     def on_pushbutton_pressed(self):
         if self._pushbutton_trigger != PUSHBUTTON_TRIGGER_UUID:
@@ -363,8 +377,8 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
     phase of the pushbutton is pressed again the door will be held open until the pushbutton
     is pressed again.
     '''
-    def __init__(self, logger: logging.Logger, config: SesamiConfig):
-        super().__init__(logger, config)
+    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
+        super().__init__(logger, config, version)
 
     def _next_door_state(self, state: DoorState) -> DoorState:
         return DoorState((state + 1) % len(DoorState))
@@ -399,13 +413,13 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
             door.on_door_request(DoorRequestState(int(payload)))
 
 
-async def activate(logger: Logger, config):
+async def activate(logger: Logger, config: SesamiConfig, version: str):
     if config.pushbutton == PushbuttonLogic.open:
-        door = ElectricDoorPushbuttonOpen(logger, config)
+        door = ElectricDoorPushbuttonOpen(logger, config, version)
     elif config.pushbutton == PushbuttonLogic.toggle:
-        door = ElectricDoorPushbuttonToggle(logger, config)
+        door = ElectricDoorPushbuttonToggle(logger, config, version)
     else:
-        door = ElectricDoorPushbuttonOpenHold(logger, config)
+        door = ElectricDoorPushbuttonOpenHold(logger, config, version)
 
     async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port,
             username=config.mqtt_username, password=config.mqtt_password) as client:
@@ -467,7 +481,7 @@ def main():
     logger.info("gpio.openclose : %s", config.gpio_openclose_mode)
 
     try:
-        asyncio.run(activate(logger, config))
+        asyncio.run(activate(logger, config, version))
     except KeyboardInterrupt:
         logger.info("program terminated; keyboard interrupt")
     except Exception:
