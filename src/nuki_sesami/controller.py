@@ -295,6 +295,8 @@ class ElectricDoor:
         self.sensor = sensor
         if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
             self.state = DoorState.closed
+        if sensor == NukiDoorsensorState.door_opened and self.state == DoorState.closed:
+            self.state = DoorState.opened
 
     def on_door_request(self, request: DoorRequestState):
         '''Process a requested door state received from the MQTT broker.
@@ -327,7 +329,7 @@ class ElectricDoor:
                 self.unlatch() # open the door once lock is unlatched
         elif request == DoorRequestState.close:
             if self.state == DoorState.openhold:
-                self.state = DoorState.closed
+                self.state = DoorState.opened # change to normal open/close mode
                 self.close()
         elif request == DoorRequestState.openhold and self.state != DoorState.openhold:
             self.state = DoorState.openhold
