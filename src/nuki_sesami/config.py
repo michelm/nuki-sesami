@@ -26,6 +26,7 @@ class SesamiConfig:
         self._gpio_openhold_mode = gpio['openhold-mode']
         self._gpio_openclose_mode = gpio['openclose-mode']
         self._pushbutton = PushbuttonLogic[config['pushbutton']]
+        self._door_open_time = config['door-open-time'] if 'door-open-time' in config else 30
 
     @property
     def nuki_device(self) -> str:
@@ -78,6 +79,10 @@ class SesamiConfig:
     @property
     def pushbutton(self) -> PushbuttonLogic:
         return self._pushbutton
+
+    @property
+    def door_open_time(self) -> int:
+        return self._door_open_time
 
 
 def get_config(prefix: str) -> SesamiConfig:

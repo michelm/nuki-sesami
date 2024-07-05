@@ -16,6 +16,7 @@ backlog=${NUKI_SESAMI_BLUE_BACKLOG:-10}
 username=${NUKI_SESAMI_USERNAME:-'sesami'}
 password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
+opentime=${NUKI_SESAMI_DOOR_OPEN_TIME:-31}
 venv=${NUKI_SESAMI_VENV:-'nuki-sesami'}
 package=${NUKI_SESAMI_PKG:-'nuki-sesami'}
 
@@ -45,6 +46,7 @@ nuki-sesami-admin setup \
     -U $username \
     -P $password \
     -B $pushbutton \
+    -O $opentime \
     --verbose
 # force to the services to write to log files
 sudo systemctl restart nuki-sesami

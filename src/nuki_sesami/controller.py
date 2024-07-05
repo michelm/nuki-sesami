@@ -11,6 +11,7 @@ import importlib.metadata
 import logging
 import os
 import sys
+import datetime
 from logging import Logger
 
 import aiomqtt
@@ -61,6 +62,15 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
 
 
+async def check_door_state(door, door_open_time, check_interval=3):
+    while True:
+        await asyncio.sleep(check_interval)
+        if door.state == DoorState.opened:
+            delta = datetime.datetime.now() - door.state_changed_time
+            if delta > datetime.timedelta(seconds=door_open_time):
+                door.state = DoorState.closed
+
+
 class Relay(DigitalOutputDevice):
     def __init__(self, pin, active_high):
         super().__init__(pin, active_high=active_high)
@@ -108,6 +118,8 @@ class ElectricDoor:
         self._openhold_mode = Relay(config.gpio_openhold_mode, False) # uses normally open relay (NO)
         self._openclose_mode = Relay(config.gpio_openclose_mode, False) # uses normally open relay (NO)
         self._state = DoorState.closed
+        self._state_changed = datetime.datetime.now()
+        self._door_open_time = config.door_open_time
         self._clients = [] # list of connected bluetooth clients
         self._background_tasks = set()
 
@@ -144,6 +156,7 @@ class ElectricDoor:
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
+        self.run_coroutine(check_door_state(self, self._door_open_time))
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
@@ -204,8 +217,13 @@ class ElectricDoor:
             return
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
         self._state = state
+        self._state_changed = datetime.datetime.now()
         self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, state))
+
+    @property
+    def state_changed_time(self) -> datetime.datetime:
+        return self._state_changed
 
     @property
     def mode(self) -> DoorMode:
