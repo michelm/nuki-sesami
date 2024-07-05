@@ -8,6 +8,7 @@ import os
 import socket
 import sys
 from logging import Logger
+from typing import Dict
 
 import aiomqtt
 
@@ -75,7 +76,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
-    def process_request(self, request):
+    def process_request(self, request: str):
         if not request:
             return
 
@@ -85,7 +86,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
                 state = DoorRequestState(req["params"]["door_request_state"])
                 self.run_coroutine(mqtt_publish_sesami_request_state(self._mqtt, self, state))
         except json.decoder.JSONDecodeError:
-            self.logger.exception('[bluez] failed to process request')
+            self.logger.exception('[bluez] failed to process request(%s)', request)
 
     def data_received(self, data):
         msg = data.decode()
@@ -93,8 +94,8 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         for m in [s for s in msg.split('\n') if s]:
             self.process_request(m)
 
-    def get_status(self) -> str:
-        return json.dumps({
+    def get_status(self) -> Dict:
+        return {
             "nuki": {
                 "lock": self._nuki_lock.value,
                 "doorsensor": self._nuki_doorsensor.value
@@ -109,19 +110,27 @@ class SesamiBluetoothAgent(asyncio.Protocol):
                 "opendoor": self._relay_opendoor
             },
             "version": self._version
+        }
+    
+    def get_jsonrpc_status_notification(self) -> str:
+        status = self.get_status()
+        return json.dumps({
+            "jsonrpc": "2.0",
+            "method": "status",
+            "params": status
         })
 
     def publish_status(self, transport: asyncio.BaseTransport | None = None):
         '''Publish status to a specific or all smartphones'''
+        msg = self.get_jsonrpc_status_notification()
+
         if transport:
-            status = self.get_status()
-            self.logger.debug("[bluez] publish_status(N)=%s", status)
-            transport.write(status.encode())
+            self.logger.debug("[bluez] publish_status(N)=%s", msg)
+            transport.write(str(msg + '\n').encode())
         elif self._clients:
-            status = self.get_status()
-            self.logger.debug("[bluez] publish_status(U%i)=%s", len(self._clients), status)
+            self.logger.debug("[bluez] publish_status(U%i)=%s", len(self._clients), msg)
             for client in self._clients:
-                client.write(status.encode())
+                client.write(str(msg + '\n').encode())
 
     def activate(self, client: aiomqtt.Client):
         self._mqtt = client
