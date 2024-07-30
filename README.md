@@ -10,7 +10,7 @@ An electric door somehow needs to receive trigger signals for it to be _opened_,
 
 The door will be _opened_ by the _Nuki Sesami_ service when the smart lock is _unlatched_ using the _Nuki Smartlock_ app. After a brief moment the door will close again.
 The door can also be  _opened_ **and** _held open_ by pressing a pushbutton connected to the _Raspberry Pi_ board on which the _Nuki Sesami_ service is running. When pressing this pushbutton again the door will be _closed_ again.
-Finally the door can be _opened_, _held open_ or _closed_ using the _Nuki Sesami_ smartphone app. Communication between the _Nuki Sesami_ service and the _Nuki 3.0_ smart lock is achieved using the _mqtt_ protocol; e.g. by running a _Mosquitto_ (**mqtt**) broker on the _Raspberry Pi_ board. Communication between the _Nuki Sesami_ service and the _Nuki Sesami_ smartphone app can be achieved using the _mqtt_ protocol or using _bluetooth_.
+Finally the door can be _opened_, _held open_ or _closed_ using the [_Nuki Sesami_ Smartphone App](https://github.com/michelm/nuki-sesami-app). Communication between the _Nuki Sesami_ service and the _Nuki 3.0_ smart lock is achieved using the _mqtt_ protocol; e.g. by running a _Mosquitto_ (**mqtt**) broker on the _Raspberry Pi_ board. Communication between the _Nuki Sesami_ service and the _Nuki Sesami_ smartphone app can be achieved using the _mqtt_ protocol or using _bluetooth_.
 
 ## Requirements
 
@@ -54,6 +54,7 @@ echo "[INFO] create passwords file"
 sudo touch /etc/mosquitto/passwords
 echo "nuki:secret1" | sudo tee -a /etc/mosquitto/passwords
 echo "sesami:secret2" | sudo tee -a /etc/mosquitto/passwords
+echo "android:secret3" | sudo tee -a /etc/mosquitto/passwords
 read -p "change passwords in /etc/mosquitto/passwords, press enter when done"
 sudo mosquitto_passwd -U /etc/mosquitto/passwords
 
@@ -113,10 +114,10 @@ sudo systemctl restart nuki-sesami
 sudo systemctl restart nuki-sesami-bluez
 ```
 
-Next pair all smartphones with the _Nuki Sesami_ app to the _Raspberry Pi_ board running the _Nuki Sesami_ services:
+Next pair all smartphones using the _Nuki Sesami_ app with the _Raspberry Pi_ board running the _Nuki Sesami_ services:
 
 - Lookup the bluetooth address and name of your smartphone
-- Ensure bluetooth is running the _Raspberry pi_ board:
+- Ensure bluetooth is running on the _Raspberry pi_ board:
 
   - `sudo systemctl status bluetooth.service`
 
@@ -129,7 +130,6 @@ Next pair all smartphones with the _Nuki Sesami_ app to the _Raspberry Pi_ board
   - `scan off`
   - `pair <bluetooth-address>`
   - `trust <bluetooth-address>`
-  - `scan on`
 
 Repeat steps above for all smartphones that need to be paired with the _Raspberry Pi_ board.
 
@@ -165,5 +165,4 @@ the opening phase the pushbutton is pressed again, the door will be kept open (_
 Otherwise the door will be closed again after a few seconds.
 
 Please note that when the system starts up, the door will be in _open/close_ mode; i.e. _Relay CH3_ will be active and _Relay CH2_
-will be inactive. This is to ensure the door can be opened and closed as per usual. When the system is in in _openhold_ mode 
-the relay states will be flipped; i.e. the _Relay CH3_ will be inactive and _Relay CH2_ will be active.
+will be inactive. This is to ensure the door can be opened and closed as per usual. When the system is in in _openhold_ mode the relay states will be flipped; i.e. the _Relay CH3_ will be inactive and _Relay CH2_ will be active.
