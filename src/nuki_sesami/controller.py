@@ -68,11 +68,11 @@ async def check_door_state(door, door_open_time, lock_unlatch_time=5,check_inter
         dt = datetime.datetime.now() - door.state_changed_time
         if door.state == DoorState.opened:
             dt_open = datetime.timedelta(seconds=door_open_time)
-            if dt > dt_open or door.sensor == NukiDoorsensorState.door_opened:
+            if dt > dt_open:
                 door.state = DoorState.closed
-        elif door.state == DoorState.openhold and not door.gpio_openhold_set:
+        elif door.state == DoorState.openhold:
             dt_unlatched = datetime.timedelta(seconds=lock_unlatch_time)
-            if dt > dt_unlatched or door.sensor == NukiDoorsensorState.door_opened:
+            if dt > dt_unlatched and not door.gpio_openhold_set:
                 door.state = DoorState.closed
 
 
