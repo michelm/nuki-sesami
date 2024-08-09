@@ -62,12 +62,17 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
 
 
-async def check_door_state(door, door_open_time, check_interval=3):
+async def check_door_state(door, door_open_time, lock_unlatch_time=5,check_interval=3):
     while True:
         await asyncio.sleep(check_interval)
+        dt = datetime.datetime.now() - door.state_changed_time
         if door.state == DoorState.opened:
-            delta = datetime.datetime.now() - door.state_changed_time
-            if delta > datetime.timedelta(seconds=door_open_time):
+            dt_open = datetime.timedelta(seconds=door_open_time)
+            if dt > dt_open or door.sensor == NukiDoorsensorState.door_opened:
+                door.state = DoorState.closed
+        elif door.state == DoorState.openhold and not door.gpio_openhold_set:
+            dt_unlatched = datetime.timedelta(seconds=lock_unlatch_time)
+            if dt > dt_unlatched or door.sensor == NukiDoorsensorState.door_opened:
                 door.state = DoorState.closed
 
 
@@ -231,6 +236,14 @@ class ElectricDoor:
     def mode(self) -> DoorMode:
         return DoorMode.openhold if self._state == DoorState.openhold else DoorMode.openclose
 
+    @property
+    def gpio_openhold_set(self) -> bool:
+        return self._openhold_mode.value != 0 
+    
+    @property
+    def gpio_openclose_set(self) -> bool:
+        return self._openclose_mode.value != 0 
+
     def pushbutton_triggered(self, uuid: str):
         '''Set by the pushbutton callback function, ensuring the pushbutton has been triggered
 
@@ -249,6 +262,10 @@ class ElectricDoor:
             return
         self.logger.info("(unlatch) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         self.lock_action(NukiLockAction.unlatch)
+
+    def unlock(self):
+        self.logger.info("(unlock) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.lock_action(NukiLockAction.unlock)
 
     def open(self):
         self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
@@ -271,7 +288,7 @@ class ElectricDoor:
     def close(self):
         self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
         if self.lock in [NukiLockState.locked, NukiLockState.locking]:
-            self.lock_action(NukiLockAction.unlock)
+            self.unlock()
         self.logger.info("(relay) openhold(0), openclose(1)")
         self._openhold_mode.off()
         self._openclose_mode.on()
