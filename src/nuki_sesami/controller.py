@@ -220,6 +220,8 @@ class ElectricDoor:
         self._state_changed = datetime.datetime.now()
         self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, state))
+        self.run_coroutine(mqtt_publish_sesami_mode(
+            self._mqtt, self.nuki_device, self.logger, self.mode))
 
     @property
     def state_changed_time(self) -> datetime.datetime:
@@ -227,7 +229,7 @@ class ElectricDoor:
 
     @property
     def mode(self) -> DoorMode:
-        return DoorMode.openhold if self.state == DoorState.openhold else DoorMode.openclose
+        return DoorMode.openhold if self._state == DoorState.openhold else DoorMode.openclose
 
     def pushbutton_triggered(self, uuid: str):
         '''Set by the pushbutton callback function, ensuring the pushbutton has been triggered
