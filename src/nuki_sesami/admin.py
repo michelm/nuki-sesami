@@ -95,7 +95,8 @@ def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> 
             'openclose-mode': args.gpio_openclose
         },
         'pushbutton': args.pushbutton,
-        'door-open-time': args.door_open_time
+        'door-open-time': args.door_open_time,
+        'lock-unlatch-time': args.lock_unlatch_time
     }
 
     if os.path.exists(fname):
@@ -295,6 +296,7 @@ def main():
                         choices=[x.name for x in PushbuttonLogic],
                         type=str)
     parser.add_argument('-O', '--door-open-time', help="door open time when in 'normal' openclose mode", default=30, type=int)
+    parser.add_argument('-L', '--lock-unlatch-time', help="lock unlatch time", default=15, type=int)
     parser.add_argument('-R', '--dryrun', help="dummy systemd installation", action='store_true')
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
     parser.add_argument('-v', '--version', help="print version and exit", action='store_true')
@@ -317,6 +319,7 @@ def main():
     logger.debug("action            : %s", args.action)
     logger.debug("pushbutton        : %s", PushbuttonLogic[args.pushbutton].name)
     logger.debug("door-open-time    : %i", args.door_open_time)
+    logger.debug("lock-unlatch-time : %i", args.lock_unlatch_time)
     logger.debug("nuki.device       : %s", args.device)
     logger.debug("mqtt.host         : %s", args.host)
     logger.debug("mqtt.port         : %i", args.port)

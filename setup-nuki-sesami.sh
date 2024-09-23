@@ -17,6 +17,7 @@ username=${NUKI_SESAMI_USERNAME:-'sesami'}
 password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
 opentime=${NUKI_SESAMI_DOOR_OPEN_TIME:-31}
+unlatchtime=${NUKI_SESAMI_LOCK_UNLATCH_TIME:-16}
 venv=${NUKI_SESAMI_VENV:-'nuki-sesami'}
 package=${NUKI_SESAMI_PKG:-'nuki-sesami'}
 
@@ -47,6 +48,7 @@ nuki-sesami-admin setup \
     -P $password \
     -B $pushbutton \
     -O $opentime \
+    -L $unlatchtime \
     --verbose
 # force to the services to write to log files
 sudo systemctl restart nuki-sesami
