@@ -62,7 +62,7 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
 
 
-async def check_door_state(door, door_open_time, lock_unlatch_time=5,check_interval=3):
+async def check_door_state(door, door_open_time, lock_unlatch_time, check_interval=3):
     while True:
         await asyncio.sleep(check_interval)
         dt = datetime.datetime.now() - door.state_changed_time
@@ -125,6 +125,7 @@ class ElectricDoor:
         self._state = DoorState.closed
         self._state_changed = datetime.datetime.now()
         self._door_open_time = config.door_open_time
+        self._lock_unlatch_time = config.lock_unlatch_time
         self._clients = [] # list of connected bluetooth clients
         self._background_tasks = set()
 
@@ -161,7 +162,7 @@ class ElectricDoor:
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
-        self.run_coroutine(check_door_state(self, self._door_open_time))
+        self.run_coroutine(check_door_state(self, self._door_open_time, self._lock_unlatch_time))
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
@@ -301,12 +302,13 @@ class ElectricDoor:
     def on_lock_state(self, lock: NukiLockState):
         self.logger.info("(lock_state) state=%s:%i, lock=%s:%i -> %s:%i",
                          self.state.name, self.state, self.lock.name, self.lock, lock.name, lock)
-        if self.lock == NukiLockState.unlatching and lock == NukiLockState.unlatched:
+        current = self.lock
+        self.lock = lock
+        if current == NukiLockState.unlatching and lock == NukiLockState.unlatched:
             if self.state == DoorState.openhold:
                 self.openhold()
             else:
                 self.open()
-        self.lock = lock
 
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
