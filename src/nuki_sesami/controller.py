@@ -18,7 +18,7 @@ import aiomqtt
 from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.config import SesamiConfig, get_config
-from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState
+from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState, NukiLockTrigger
 from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, PushbuttonLogic
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
@@ -310,6 +310,10 @@ class ElectricDoor:
             else:
                 self.open()
 
+    def on_lock_action_event(self, state: NukiLockState, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
+        self.logger.info("(lock_action_event) state=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i",
+            state.name, state, trigger.name, trigger, auth_id, code_id, auto_unlock)
+
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
                          self.state.name, self.state, self.sensor.name, self.sensor, sensor.name, sensor)
@@ -448,6 +452,11 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
         door.logger.info('[mqtt] receive %s=%s', topic, payload)
         if topic == f"nuki/{door.nuki_device}/state":
             door.on_lock_state(NukiLockState(int(payload)))
+        elif topic == f"nuki/{door.nuki_device}/lockActionEvent":
+            ev = [int(e) for e in payload.split(',')]
+            state = NukiLockState(ev[0])
+            trigger = NukiLockTrigger(ev[1])
+            door.on_lock_action_event(state, trigger, ev[2], ev[3], bool(ev[4]))
         elif topic == f"nuki/{door.nuki_device}/doorsensorState":
             door.on_doorsensor_state(NukiDoorsensorState(int(payload)))
         elif topic == f"sesami/{door.nuki_device}/request/state":
@@ -467,6 +476,7 @@ async def activate(logger: Logger, config: SesamiConfig, version: str):
         loop = asyncio.get_running_loop()
         door.activate(client, loop)
         await client.subscribe(f"nuki/{door.nuki_device}/state")
+        await client.subscribe(f"nuki/{door.nuki_device}/lockActionEvent")
         await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
         await client.subscribe(f"sesami/{door.nuki_device}/request/state")
         await mqtt_receiver(client, door)
