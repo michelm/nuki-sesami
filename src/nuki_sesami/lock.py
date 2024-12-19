@@ -1,5 +1,5 @@
 from enum import IntEnum
-
+import datetime
 
 class NukiLockState(IntEnum):
     uncalibrated    = 0 # untrained
@@ -46,3 +46,13 @@ class NukiLockTrigger(IntEnum):
     homekit             = 171
     mqtt                = 172
 
+class NukiLockActionEvent:
+    '''Contains the last received lock action event from the Nuki smart lock
+    '''
+    def __init__(self, state: NukiLockState, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
+        self.state = state
+        self.trigger = trigger
+        self.auth_id = auth_id
+        self.code_id = code_id
+        self.auto_unlock = auto_unlock
+        self.timestamp = datetime.datetime.now()
