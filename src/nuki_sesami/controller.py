@@ -350,8 +350,7 @@ class ElectricDoor:
             self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
     def on_lock_state(self, lock: NukiLockState):
-        self.logger.info("(lock_state) state=%s:%i, lock=%s:%i -> %s:%i",
-                         self.state.name, self.state, self.lock.name, self.lock, lock.name, lock)
+        self.logger.info("(lock_state) %s:%i -> %s:%i", self.lock.name, self.lock, lock.name, lock)
         self.lock = lock
 
         if lock == NukiLockState.unlatching:
@@ -411,8 +410,7 @@ class ElectricDoor:
         self._nuki_action_event = NukiLockActionEvent(action, trigger, auth_id, code_id, auto_unlock)
 
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
-        self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
-                         self.state.name, self.state, self.sensor.name, self.sensor, sensor.name, sensor)
+        self.logger.info("(doorsensor_state) %s:%i -> %s:%i", self.sensor.name, self.sensor, sensor.name, sensor)
         self.sensor = sensor
         if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
             self.state = DoorState.closed
@@ -596,19 +594,21 @@ def main():
     logger = getlogger('nuki-sesami', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
     config = get_config(cpath)
 
-    logger.info("version        : %s", version)
-    logger.info("prefix         : %s", prefix)
-    logger.info("config-path    : %s", cpath)
-    logger.info("pushbutton     : %s", config.pushbutton.name)
-    logger.info("nuki.device    : %s", config.nuki_device)
-    logger.info("mqtt.host      : %s", config.mqtt_host)
-    logger.info("mqtt.port      : %i", config.mqtt_port)
-    logger.info("mqtt.username  : %s", config.mqtt_username)
-    logger.info("mqtt.password  : %s", '***')
-    logger.info("gpio.pushbutton: %s", config.gpio_pushbutton)
-    logger.info("gpio.opendoor  : %s", config.gpio_opendoor)
-    logger.info("gpio.openhold  : %s", config.gpio_openhold_mode)
-    logger.info("gpio.openclose : %s", config.gpio_openclose_mode)
+    logger.info("version          : %s", version)
+    logger.info("prefix           : %s", prefix)
+    logger.info("config-path      : %s", cpath)
+    logger.info("pushbutton       : %s", config.pushbutton.name)
+    logger.info("nuki.device      : %s", config.nuki_device)
+    logger.info("mqtt.host        : %s", config.mqtt_host)
+    logger.info("mqtt.port        : %i", config.mqtt_port)
+    logger.info("mqtt.username    : %s", config.mqtt_username)
+    logger.info("mqtt.password    : %s", '***')
+    logger.info("gpio.pushbutton  : %s", config.gpio_pushbutton)
+    logger.info("gpio.opendoor    : %s", config.gpio_opendoor)
+    logger.info("gpio.openhold    : %s", config.gpio_openhold_mode)
+    logger.info("gpio.openclose   : %s", config.gpio_openclose_mode)
+    logger.info("door-open-time   : %i", config.door_open_time)
+    logger.info("lock-unlatch-time: %i", config.lock_unlatch_time)
 
     try:
         asyncio.run(activate(logger, config, version))
