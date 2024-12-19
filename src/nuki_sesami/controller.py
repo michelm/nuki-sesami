@@ -127,6 +127,9 @@ class ElectricDoor:
     _nuki_doorsensor: NukiDoorsensorState
     """The current Nuki door sensor state"""
 
+    _nuki_action: NukiLockAction | None
+    """The last issued Nuki lock action, or None if no action was issued"""
+
     _nuki_action_event: None | NukiLockActionEvent
     """Last received Nuki lock action event"""
 
@@ -163,6 +166,7 @@ class ElectricDoor:
         self._nuki_device = config.nuki_device
         self._nuki_state = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
+        self._nuki_action = None
         self._nuki_action_event = None
         self._pushbutton = PushButton(config.gpio_pushbutton, self, bounce_time=1.0)
         self._pushbutton.when_pressed = pushbutton_pressed
@@ -202,6 +206,8 @@ class ElectricDoor:
 
         Initializes GPIO to pins to default state, publishes initial (relay) states
         and modes on MQTT.
+        Reset latched requests, if any, to 'unlatch' the lock; this may force the
+        lock from its full lock; e.g. when (re)starting this service during night hours.
         '''
         self._mqtt = client
         self._loop = loop
@@ -210,6 +216,7 @@ class ElectricDoor:
         self._openhold_mode.off()
         self._openclose_mode.on()
         self.run_coroutine(check_door_state(self, self._door_open_time, self._lock_unlatch_time))
+        self.request_lock_action(NukiLockAction.unlock) # reset 'unlatch' request
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
@@ -248,32 +255,41 @@ class ElectricDoor:
 
     @property
     def lock(self) -> NukiLockState:
-        """Returns the Nuki lock state"""
+        """Get | set the Nuki lock state"""
         return self._nuki_state
 
     @lock.setter
     def lock(self, state: NukiLockState):
-        """Changes the Nuki lock state"""
         self._nuki_state = state
 
     @property
+    def lock_action(self) -> NukiLockAction | None:
+        """Get | set the requested Nuki lock action"""
+        return self._nuki_action
+
+    @lock_action.setter
+    def lock_action(self, action: NukiLockAction):
+        if self._nuki_action == action:
+            return
+        self.logger.info("(lock_action) %s -> %s", self._nuki_action.name if self._nuki_action else None, action.name)
+        self._nuki_action = action
+
+    @property
     def sensor(self) -> NukiDoorsensorState:
-        """Returns Nuki door sensor state"""
+        """Get | set the Nuki door sensor state"""
         return self._nuki_doorsensor
 
     @sensor.setter
     def sensor(self, state: NukiDoorsensorState):
-        """Changes the Nuki door sensor state"""
         self._nuki_doorsensor = state
 
     @property
     def state(self) -> DoorState:
-        """Returns the current door state"""
+        """Get | set the current door state"""
         return self._state
 
     @state.setter
     def state(self, state: DoorState):
-        """Changes the current door state"""
         if state == self._state:
             return
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
@@ -283,6 +299,9 @@ class ElectricDoor:
             self._mqtt, self.nuki_device, self.logger, state))
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, self.mode))
+        if state == DoorState.closed and self.lock_action == NukiLockAction.unlatch:
+            # door state changed from open(hold) to closed; cancel the 'unlatch' request
+            self.request_lock_action(NukiLockAction.unlock)
 
     @property
     def state_changed_time(self) -> datetime.datetime:
@@ -302,7 +321,7 @@ class ElectricDoor:
     def gpio_openclose_set(self) -> bool:
         return self._openclose_mode.value != 0
 
-    def lock_action(self, action: NukiLockAction):
+    def request_lock_action(self, action: NukiLockAction):
         self.logger.info("(lock) request action=%s", action.name)
         self.run_coroutine(mqtt_publish_nuki_lock_action(self._mqtt, self.nuki_device, self.logger, action))
 
@@ -310,12 +329,12 @@ class ElectricDoor:
         if self.lock in [NukiLockState.unlatching]:
             return
         self.logger.info("(unlatch) state=%s, lock=%s", self.state.name, self.lock.name)
-        self.lock_action(NukiLockAction.unlatch)
+        self.request_lock_action(NukiLockAction.unlatch)
         self._lock_unlatch_requested = True
 
     def unlock(self):
         self.logger.info("(unlock) state=%s, lock=%s", self.state.name, self.lock.name)
-        self.lock_action(NukiLockAction.unlock)
+        self.request_lock_action(NukiLockAction.unlock)
 
     def open(self):
         self.logger.info("(open) state=%s, lock=%s", self.state.name, self.lock.name)
@@ -522,7 +541,7 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
         if topic == f"nuki/{door.nuki_device}/state":
             door.on_lock_state(NukiLockState(int(payload)))
         elif topic == f"nuki/{door.nuki_device}/lockAction":
-            pass # no action here
+            door.lock_action = NukiLockAction(int(payload))
         elif topic == f"nuki/{door.nuki_device}/lockActionEvent":
             ev = [int(e) for e in payload.split(',')]
             action = NukiLockAction(ev[0])
