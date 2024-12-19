@@ -82,7 +82,7 @@ async def timed_on_lock_unlatched(door, lock_unlatch_time):
         door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", lock_unlatch_time)
         door.on_lock_unlatched()
     else:
-        door.logger.info("(timed-unlatched) cancelled; unsuited lock state(%s)", door.lock.name)
+        door.logger.info("(timed-unlatched) cancel; unsuited lock state(%s)", door.lock.name)
 
 
 class Relay(DigitalOutputDevice):
@@ -300,8 +300,7 @@ class ElectricDoor:
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, self.mode))
         if state == DoorState.closed and self.lock_action == NukiLockAction.unlatch:
-            # door state changed from open(hold) to closed; cancel the 'unlatch' request
-            self.request_lock_action(NukiLockAction.unlock)
+            self.request_lock_action(NukiLockAction.unlock) # cancel the 'unlatch' request
 
     @property
     def state_changed_time(self) -> datetime.datetime:
