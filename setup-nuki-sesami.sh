@@ -18,8 +18,9 @@ password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
 opentime=${NUKI_SESAMI_DOOR_OPEN_TIME:-31}
 unlatchtime=${NUKI_SESAMI_LOCK_UNLATCH_TIME:-16}
-venv=${NUKI_SESAMI_VENV:-'nuki-sesami'}
-package=${NUKI_SESAMI_PKG:-'nuki-sesami'}
+version=${NUKI_SESAMI_VERSION:-'0.0.0'}
+venv=${NUKI_SESAMI_VENV:-"nuki-sesami-$version"}
+package=${NUKI_SESAMI_PKG:-"nuki_sesami-$version-py3-none-any.whl"}
 
 if [ -d $HOME/$venv ] ; then
     echo "[INFO] removing virtual environment $HOME/$venv"
