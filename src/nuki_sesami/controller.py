@@ -82,7 +82,7 @@ async def timed_on_lock_unlatched(door, lock_unlatch_time):
         door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", lock_unlatch_time)
         door.on_lock_unlatched()
     else:
-        door.logger.info("(timed-unlatched) cancelled; unsuited state(%s:%i)", door.lock.name, door.lock)
+        door.logger.info("(timed-unlatched) cancelled; unsuited lock state(%s)", door.lock.name)
 
 
 class Relay(DigitalOutputDevice):
@@ -303,30 +303,29 @@ class ElectricDoor:
         return self._openclose_mode.value != 0
 
     def lock_action(self, action: NukiLockAction):
-        self.logger.info("(lock) request action=%s:%i", action.name, int(action))
-        self.run_coroutine(mqtt_publish_nuki_lock_action(
-            self._mqtt, self.nuki_device, self.logger, action))
+        self.logger.info("(lock) request action=%s", action.name)
+        self.run_coroutine(mqtt_publish_nuki_lock_action(self._mqtt, self.nuki_device, self.logger, action))
 
     def unlatch(self):
         if self.lock in [NukiLockState.unlatching]:
             return
-        self.logger.info("(unlatch) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(unlatch) state=%s, lock=%s", self.state.name, self.lock.name)
         self.lock_action(NukiLockAction.unlatch)
         self._lock_unlatch_requested = True
 
     def unlock(self):
-        self.logger.info("(unlock) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(unlock) state=%s, lock=%s", self.state.name, self.lock.name)
         self.lock_action(NukiLockAction.unlock)
 
     def open(self):
-        self.logger.info("(open) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(open) state=%s, lock=%s", self.state.name, self.lock.name)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
         self.run_coroutine(mqtt_publish_sesami_relay_opendoor_blink(
             self._mqtt, self.nuki_device, self.logger))
 
     def openhold(self):
-        self.logger.info("(openhold) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(openhold) state=%s, lock=%s", self.state.name, self.lock.name)
         self.logger.info("(relay) openhold(1), openclose(0)")
         self._openhold_mode.on()
         self._openclose_mode.off()
@@ -337,7 +336,7 @@ class ElectricDoor:
             self._mqtt, self.nuki_device, self.logger, DoorMode.openhold))
 
     def close(self):
-        self.logger.info("(close) state=%s:%i, lock=%s:%i", self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(close) state=%s, lock=%s", self.state.name, self.lock.name)
         if self.lock in [NukiLockState.locked, NukiLockState.locking]:
             self.unlock()
         self.logger.info("(relay) openhold(0), openclose(1)")
@@ -350,7 +349,7 @@ class ElectricDoor:
             self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
     def on_lock_state(self, lock: NukiLockState):
-        self.logger.info("(lock_state) %s:%i -> %s:%i", self.lock.name, self.lock, lock.name, lock)
+        self.logger.info("(lock_state) %s -> %s", self.lock.name, lock.name)
         self.lock = lock
 
         if lock == NukiLockState.unlatching:
@@ -386,9 +385,9 @@ class ElectricDoor:
 
         if not open_door:
             ev = self._nuki_action_event
-            self.logger.warning("(unlatch) ignored; action=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
-                ev.action.name, ev.action,
-                ev.trigger.name, ev.trigger,
+            self.logger.warning("(unlatch) ignored; action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
+                ev.action.name,
+                ev.trigger.name,
                 ev.auth_id,
                 ev.code_id,
                 ev.auto_unlock,
@@ -405,12 +404,12 @@ class ElectricDoor:
                 self.open()
 
     def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
-        self.logger.info("(lock_action_event) action=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i",
-            action.name, action, trigger.name, trigger, auth_id, code_id, auto_unlock)
+        self.logger.info("(lock_action_event) action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i",
+            action.name, trigger.name, auth_id, code_id, auto_unlock)
         self._nuki_action_event = NukiLockActionEvent(action, trigger, auth_id, code_id, auto_unlock)
 
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
-        self.logger.info("(doorsensor_state) %s:%i -> %s:%i", self.sensor.name, self.sensor, sensor.name, sensor)
+        self.logger.info("(doorsensor_state) %s -> %s", self.sensor.name, sensor.name)
         self.sensor = sensor
         if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
             self.state = DoorState.closed
@@ -438,8 +437,7 @@ class ElectricDoor:
         Parameters:
         * request: the requested door state
         '''
-        self.logger.info("(door_request) state=%s:%i, lock=%s:%i, request=%s:%i",
-                         self.state.name, self.state, self.lock.name, self.lock, request.name, request)
+        self.logger.info("(door_request) state=%s, lock=%s, request=%s", self.state.name, self.lock.name, request.name)
         if request == DoorRequestState.none:
             return
         if request == DoorRequestState.open:
@@ -471,8 +469,7 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         self.state = self._next_door_state(self.state)
-        self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
-                         self.classname, self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         if self.state == DoorState.openhold:
             self.unlatch() # open the door once lock is unlatched
         else:
@@ -489,8 +486,7 @@ class ElectricDoorPushbuttonOpen(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         self.state = DoorState.opened
-        self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
-                         self.classname, self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         self.unlatch() # open the door once lock is unlatched
 
 
@@ -509,8 +505,7 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
 
     def on_pushbutton_pressed(self):
         self.state = self._next_door_state(self.state)
-        self.logger.info("(%s.pushbutton_pressed) state=%s:%i, lock=%s:%i",
-                         self.classname, self.state.name, self.state, self.lock.name, self.lock)
+        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         if self.state == DoorState.closed:
             self.unlatch() # open the door once lock is unlatched
         elif self.state == DoorState.opened:
