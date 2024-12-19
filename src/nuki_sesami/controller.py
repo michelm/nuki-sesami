@@ -78,7 +78,11 @@ async def check_door_state(door, door_open_time, lock_unlatch_time, check_interv
 async def timed_on_lock_unlatched(door, lock_unlatch_time):
     """Opens the door if the lock does not become unlatched but has been requested to do so"""
     await asyncio.sleep(lock_unlatch_time)
-    door.on_lock_unlatched()
+    if door.lock == NukiLockState.unlatching:
+        door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", lock_unlatch_time)
+        door.on_lock_unlatched()
+    else:
+        door.logger.info("(timed-unlatched) cancelled; unsuited state(%s:%i)", door.lock.name, door.lock)
 
 
 class Relay(DigitalOutputDevice):
@@ -369,10 +373,12 @@ class ElectricDoor:
         
         """
         if not self._nuki_action_event:
-            self.logger.debug("(unlatch) ignored; missing lock action event")
+            self.logger.info("(unlatch) ignored; missing lock action event")
             return
 
-        if self._nuki_action_event.trigger == NukiLockTrigger.system_bluetooth:
+        if self._nuki_action_event.action != NukiLockAction.unlatch:
+            open_door = False
+        elif self._nuki_action_event.trigger == NukiLockTrigger.system_bluetooth:
             open_door = True
         elif self._nuki_action_event.trigger == NukiLockTrigger.mqtt and self._lock_unlatch_requested:
             open_door = True
@@ -380,8 +386,15 @@ class ElectricDoor:
             open_door = False
 
         if not open_door:
-            self.logger.warning("(unlatch) unexpected trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
-                             self.state.name, self.state, self.lock.name, self.lock, self._lock_unlatch_requested)
+            ev = self._nuki_action_event
+            self.logger.warning("(unlatch) ignored; action=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
+                ev.action.name, ev.action,
+                ev.trigger.name, ev.trigger,
+                ev.auth_id,
+                ev.code_id,
+                ev.auto_unlock,
+                self._lock_unlatch_requested
+            )
 
         self._nuki_action_event = None
         self._lock_unlatch_requested = False
@@ -392,10 +405,10 @@ class ElectricDoor:
             else:
                 self.open()
 
-    def on_lock_action_event(self, state: NukiLockState, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
-        self.logger.info("(lock_action_event) state=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i",
-            state.name, state, trigger.name, trigger, auth_id, code_id, auto_unlock)
-        self._nuki_action_event = NukiLockActionEvent(state, trigger, auth_id, code_id, auto_unlock)
+    def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
+        self.logger.info("(lock_action_event) action=%s:%i, trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i",
+            action.name, action, trigger.name, trigger, auth_id, code_id, auto_unlock)
+        self._nuki_action_event = NukiLockActionEvent(action, trigger, auth_id, code_id, auto_unlock)
 
     def on_doorsensor_state(self, sensor: NukiDoorsensorState):
         self.logger.info("(doorsensor_state) state=%s:%i, sensor=%s:%i -> %s:%i",
@@ -519,9 +532,9 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
             pass # no action here
         elif topic == f"nuki/{door.nuki_device}/lockActionEvent":
             ev = [int(e) for e in payload.split(',')]
-            state = NukiLockState(ev[0])
+            action = NukiLockAction(ev[0])
             trigger = NukiLockTrigger(ev[1])
-            door.on_lock_action_event(state, trigger, ev[2], ev[3], bool(ev[4]))
+            door.on_lock_action_event(action, trigger, ev[2], ev[3], bool(ev[4]))
         elif topic == f"nuki/{door.nuki_device}/doorsensorState":
             door.on_doorsensor_state(NukiDoorsensorState(int(payload)))
         elif topic == f"sesami/{door.nuki_device}/request/state":

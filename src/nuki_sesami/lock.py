@@ -47,10 +47,29 @@ class NukiLockTrigger(IntEnum):
     mqtt                = 172
 
 class NukiLockActionEvent:
-    '''Contains the last received lock action event from the Nuki smart lock
-    '''
-    def __init__(self, state: NukiLockState, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
-        self.state = state
+    '''Contains the last received lock action event from the Nuki smart lock'''
+
+    action: NukiLockAction
+    """Request lock action; e.g. unlatch"""
+
+    trigger: NukiLockTrigger
+    """Trigger source of the event; e.g. bluetooth"""
+
+    auth_id: int
+    """Authorization ID of the user"""
+
+    code_id: int
+    """ID of the Keypad code, 0 = unknown"""
+
+    auto_unlock: int
+    """Auto-Unlock (0 or 1) or number of button presses (only button & fob actions) or
+    Keypad source (0 = back key, 1 = code, 2 = fingerprint)"""
+
+    timestamp: datetime.datetime
+    """Timestamp of the event"""
+
+    def __init__(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: int):
+        self.action = action
         self.trigger = trigger
         self.auth_id = auth_id
         self.code_id = code_id
