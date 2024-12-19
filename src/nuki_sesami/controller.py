@@ -369,6 +369,7 @@ class ElectricDoor:
         
         """
         if not self._nuki_action_event:
+            self.logger.debug("(unlatch) ignored; missing lock action event")
             return
 
         if self._nuki_action_event.trigger == NukiLockTrigger.system_bluetooth:
@@ -377,6 +378,10 @@ class ElectricDoor:
             open_door = True
         else:
             open_door = False
+
+        if not open_door:
+            self.logger.warning("(unlatch) unexpected trigger=%s:%i, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
+                             self.state.name, self.state, self.lock.name, self.lock, self._lock_unlatch_requested)
 
         self._nuki_action_event = None
         self._lock_unlatch_requested = False
@@ -510,6 +515,8 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
         door.logger.info('[mqtt] receive %s=%s', topic, payload)
         if topic == f"nuki/{door.nuki_device}/state":
             door.on_lock_state(NukiLockState(int(payload)))
+        elif topic == f"nuki/{door.nuki_device}/lockAction":
+            pass # no action here
         elif topic == f"nuki/{door.nuki_device}/lockActionEvent":
             ev = [int(e) for e in payload.split(',')]
             state = NukiLockState(ev[0])
@@ -534,6 +541,7 @@ async def activate(logger: Logger, config: SesamiConfig, version: str):
         loop = asyncio.get_running_loop()
         door.activate(client, loop)
         await client.subscribe(f"nuki/{door.nuki_device}/state")
+        await client.subscribe(f"nuki/{door.nuki_device}/lockAction")
         await client.subscribe(f"nuki/{door.nuki_device}/lockActionEvent")
         await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
         await client.subscribe(f"sesami/{door.nuki_device}/request/state")
