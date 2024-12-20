@@ -75,14 +75,35 @@ async def check_door_state(door, door_open_time, lock_unlatch_time, check_interv
                 door.state = DoorState.closed
 
 
-async def timed_on_lock_unlatched(door, lock_unlatch_time):
-    """Opens the door if the lock does not become unlatched but has been requested to do so"""
-    await asyncio.sleep(lock_unlatch_time)
-    if door.lock == NukiLockState.unlatching:
-        door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", lock_unlatch_time)
-        door.on_lock_unlatched()
-    else:
-        door.logger.info("(timed-unlatched) cancel; unsuited lock state(%s)", door.lock.name)
+async def timed_lock_unlatched(door, unlatch_timeout:float, unlatch_time:float=4.0, check_interval:float=0.2):
+    """Verifies the lock unlatches; i.e. changes state to unlatched, when it is
+    instructed to do so. Triggers the door to open in case the lock is still unlatching
+    after the unlatch timeout has been reached and an (associated) action event has
+    been received.
+    
+    Arguments:
+    - door: The electric door instance
+    - unlatch_timeout: The maximum time (in [s]) to wait for the lock to become unlatched
+    - unlatch_time: The time (in [s]) to wait before checking the lock is unlatched
+    - check_interval: The interval (in [s]) to check if the lock is unlatched
+    """
+    await asyncio.sleep(unlatch_time)
+    t = unlatch_time
+    c = check_interval
+
+    while t < unlatch_timeout:
+        await asyncio.sleep(c)
+        t += c
+        if door.lock == NukiLockState.unlatched:
+            return # we're done; this will be handled by on_lock_state()
+        elif door.lock == NukiLockState.unlatching:
+            if door.lock_action_event != None:
+                door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", unlatch_timeout)
+                door.on_lock_unlatched()
+                return
+        else:
+            return # lock is not unlatching; we're done
+    door.logger.info("(timed-unlatched) cancel; no lock action event received within %.1f[s]", t)
 
 
 class Relay(DigitalOutputDevice):
@@ -275,6 +296,14 @@ class ElectricDoor:
         self._nuki_action = action
 
     @property
+    def lock_action_event(self) -> NukiLockActionEvent | None:
+        """Get the Nuki lock action event (if any)
+        
+        Will be reset (to None) when the event has been processed.
+        """
+        return self._nuki_action_event
+
+    @property
     def sensor(self) -> NukiDoorsensorState:
         """Get | set the Nuki door sensor state"""
         return self._nuki_doorsensor
@@ -371,7 +400,7 @@ class ElectricDoor:
         self.lock = lock
 
         if lock == NukiLockState.unlatching:
-            self.run_coroutine(timed_on_lock_unlatched(self, self._lock_unlatch_time))
+            self.run_coroutine(timed_lock_unlatched(self, self._lock_unlatch_time))
 
         elif lock == NukiLockState.unlatched:
             self.on_lock_unlatched()
@@ -452,8 +481,8 @@ class ElectricDoor:
         - none:
             * ignore request
 
-        Parameters:
-        * request: the requested door state
+        Arguments:
+        - request: the requested door state
         '''
         self.logger.info("(door_request) state=%s, lock=%s, request=%s", self.state.name, self.lock.name, request.name)
         if request == DoorRequestState.none:
