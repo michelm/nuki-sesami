@@ -16,8 +16,9 @@ backlog=${NUKI_SESAMI_BLUE_BACKLOG:-10}
 username=${NUKI_SESAMI_USERNAME:-'sesami'}
 password=${NUKI_SESAMI_PASSWORD}
 pushbutton=${NUKI_SESAMI_PUSHBUTTON:-'openhold'}
-opentime=${NUKI_SESAMI_DOOR_OPEN_TIME:-35}
-unlatchtime=${NUKI_SESAMI_LOCK_UNLATCH_TIME:-10}
+opentime=${NUKI_SESAMI_DOOR_OPEN_TIME:-40}
+closetime=${NUKI_SESAMI_DOOR_CLOSE_TIME:-10}
+unlatchtime=${NUKI_SESAMI_LOCK_UNLATCH_TIME:-4}
 version=${NUKI_SESAMI_VERSION:-'0.0.0'}
 venv=${NUKI_SESAMI_VENV:-"nuki-sesami-$version"}
 package=${NUKI_SESAMI_PKG:-"nuki_sesami-$version-py3-none-any.whl"}
@@ -49,6 +50,7 @@ nuki-sesami-admin setup \
     -P $password \
     -B $pushbutton \
     -O $opentime \
+    -C $closetime \
     -L $unlatchtime \
     --verbose
 # force to the services to write to log files

@@ -61,35 +61,55 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
 
 
-async def check_door_state(door, door_open_time, lock_unlatch_time, check_interval=3):
+async def timed_door_closed(door, open_time:float, close_time:float, check_interval:float=3.0):
+    """Verifies and corrects the (logical) door state to closed when needed.
+    
+    Sometimes when opening the door, the door state is not updated to closed once the
+    door (physically) has closed since the door sensor has failed to detect it. In this case
+    this function will force the door state to closed after a configurable time.
+
+    Examples:
+    - When opening the door momentarily (open/close) we expect the door to be closed 
+      again within 40 seconds.
+    - When ending the 'openhold' mode we expect the door to be closed within 10 seconds.
+
+    Arguments:
+    - door: The electric door instance
+    - open_time: The time (in [s]) needed to open and close the door
+    - close_time: The time (in [s]) needed to close the door when ending openhold mode
+    - check_interval: The check interval (in [s]) for the door state
+    """
     while True:
         await asyncio.sleep(check_interval)
         dt = datetime.datetime.now() - door.state_changed_time
         if door.state == DoorState.opened:
-            dt_open = datetime.timedelta(seconds=door_open_time)
+            dt_open = datetime.timedelta(seconds=open_time)
             if dt > dt_open:
                 door.state = DoorState.closed
         elif door.state == DoorState.openhold:
-            dt_unlatched = datetime.timedelta(seconds=lock_unlatch_time)
+            dt_unlatched = datetime.timedelta(seconds=close_time)
             if dt > dt_unlatched and not door.gpio_openhold_set:
                 door.state = DoorState.closed
 
 
-async def timed_lock_unlatched(door, unlatch_timeout:float, unlatch_time:float=4.0, check_interval:float=0.2):
+async def timed_lock_unlatched(door, unlatch_time:float=4.0, check_interval:float=0.2):
     """Verifies the lock unlatches; i.e. changes state to unlatched, when it is
     instructed to do so. Triggers the door to open in case the lock is still unlatching
     after the unlatch timeout has been reached and an (associated) action event has
     been received.
+
+    Remark:
+    The lock unlatch timeout will be 3 * unlatch_timeout
     
     Arguments:
     - door: The electric door instance
-    - unlatch_timeout: The maximum time (in [s]) to wait for the lock to become unlatched
     - unlatch_time: The time (in [s]) to wait before checking the lock is unlatched
     - check_interval: The interval (in [s]) to check if the lock is unlatched
     """
     await asyncio.sleep(unlatch_time)
     t = unlatch_time
     c = check_interval
+    unlatch_timeout = 3 * unlatch_time
 
     while t < unlatch_timeout:
         await asyncio.sleep(c)
@@ -172,9 +192,12 @@ class ElectricDoor:
     _state_changed: datetime.datetime
     """Timestamp when the door state was last changed"""
 
-    _door_open_time = int
+    _door_open_time: int
     """The estimated time, in seconds, for the door to open and close"""
-    
+
+    _door_close_time: int
+    """The estimated time, in seconds, for the door close when ending openhold mode"""
+
     _lock_unlatch_time: int
     """The estimated time, in seconds, for the lock to move from locked or latched to unlatched"""
     
@@ -197,6 +220,7 @@ class ElectricDoor:
         self._state = DoorState.closed
         self._state_changed = datetime.datetime.now()
         self._door_open_time = config.door_open_time
+        self._door_close_time = config.door_close_time
         self._lock_unlatch_time = config.lock_unlatch_time
         self._lock_unlatch_requested = False
         self._background_tasks = set()
@@ -236,7 +260,7 @@ class ElectricDoor:
         self._opendoor.off()
         self._openhold_mode.off()
         self._openclose_mode.on()
-        self.run_coroutine(check_door_state(self, self._door_open_time, self._lock_unlatch_time))
+        self.run_coroutine(timed_door_closed(self, self._door_open_time, self._door_close_time))
         self.request_lock_action(NukiLockAction.unlock) # reset 'unlatch' request
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
@@ -650,6 +674,7 @@ def main():
     logger.info("gpio.openhold    : %s", config.gpio_openhold_mode)
     logger.info("gpio.openclose   : %s", config.gpio_openclose_mode)
     logger.info("door-open-time   : %i", config.door_open_time)
+    logger.info("door-close-time  : %i", config.door_close_time)
     logger.info("lock-unlatch-time: %i", config.lock_unlatch_time)
 
     try:

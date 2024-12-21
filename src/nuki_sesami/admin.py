@@ -96,6 +96,7 @@ def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> 
         },
         'pushbutton': args.pushbutton,
         'door-open-time': args.door_open_time,
+        'door-close-time': args.door_close_time,
         'lock-unlatch-time': args.lock_unlatch_time
     }
 
@@ -295,8 +296,9 @@ def main():
                         default=PushbuttonLogic.openhold.name,
                         choices=[x.name for x in PushbuttonLogic],
                         type=str)
-    parser.add_argument('-O', '--door-open-time', help="door open time when in 'normal' openclose mode", default=30, type=int)
-    parser.add_argument('-L', '--lock-unlatch-time', help="lock unlatch time", default=15, type=int)
+    parser.add_argument('-O', '--door-open-time', help="door open and close time when in 'normal' openclose mode", default=40, type=int)
+    parser.add_argument('-C', '--door-close-time', help="door close time when ending openhold mode", default=10, type=int)
+    parser.add_argument('-L', '--lock-unlatch-time', help="lock unlatch time", default=4, type=int)
     parser.add_argument('-R', '--dryrun', help="dummy systemd installation", action='store_true')
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
     parser.add_argument('-v', '--version', help="print version and exit", action='store_true')
@@ -319,6 +321,7 @@ def main():
     logger.debug("action            : %s", args.action)
     logger.debug("pushbutton        : %s", PushbuttonLogic[args.pushbutton].name)
     logger.debug("door-open-time    : %i", args.door_open_time)
+    logger.debug("door-close-time   : %i", args.door_close_time)
     logger.debug("lock-unlatch-time : %i", args.lock_unlatch_time)
     logger.debug("nuki.device       : %s", args.device)
     logger.debug("mqtt.host         : %s", args.host)
