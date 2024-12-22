@@ -42,7 +42,7 @@ class NukiLockTrigger(IntEnum):
     reserved            = 1
     button              = 2
     automatic           = 3 # e.g. time controlled
-    autolock            = 4
+    autolock            = 6
     homekit             = 171
     mqtt                = 172
 

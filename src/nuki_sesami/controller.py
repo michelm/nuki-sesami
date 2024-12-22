@@ -26,8 +26,8 @@ from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction):
     topic = f"nuki/{device}/lockAction"
-    logger.info('[mqtt] publish %s=%s:%i (retain)', topic, action.name, action.value)
-    await client.publish(topic, action.value, retain=True)
+    logger.info('[mqtt] publish %s=%s:%i', topic, action.name, action.value)
+    await client.publish(topic, action.value, retain=False)
 
 
 async def mqtt_publish_sesami_version(client: aiomqtt.Client, device: str, logger: Logger, version: str):
@@ -51,14 +51,14 @@ async def mqtt_publish_sesami_mode(client: aiomqtt.Client, device: str, logger: 
 async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, name: str,
                                           logger: Logger, state: int, retain=True):
     topic = f"sesami/{device}/relay/{name}"
-    logger.info('[mqtt] publish %s=%i (retain=%s)', topic, state, retain)
+    logger.info('[mqtt] publish %s=%i%s', topic, state, " (retain)" if retain else "")
     await client.publish(topic, state, retain=retain)
 
 
 async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, device: str, logger: Logger):
-    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 1, retain=True)
+    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 1)
     await asyncio.sleep(1)
-    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0, retain=True)
+    await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0)
 
 
 async def timed_door_closed(door, open_time:float, close_time:float, check_interval:float=3.0):
@@ -92,14 +92,11 @@ async def timed_door_closed(door, open_time:float, close_time:float, check_inter
                 door.state = DoorState.closed
 
 
-async def timed_lock_unlatched(door, unlatch_time:float=4.0, check_interval:float=0.2):
+async def timed_lock_unlatched(door, unlatch_time:float=4.0):
     """Verifies the lock unlatches; i.e. changes state to unlatched, when it is
     instructed to do so. Triggers the door to open in case the lock is still unlatching
     after the unlatch timeout has been reached and an (associated) action event has
     been received.
-
-    Remark:
-    The lock unlatch timeout will be 3 * unlatch_timeout
     
     Arguments:
     - door: The electric door instance
@@ -107,23 +104,15 @@ async def timed_lock_unlatched(door, unlatch_time:float=4.0, check_interval:floa
     - check_interval: The interval (in [s]) to check if the lock is unlatched
     """
     await asyncio.sleep(unlatch_time)
-    t = unlatch_time
-    c = check_interval
-    unlatch_timeout = 3 * unlatch_time
 
-    while t < unlatch_timeout:
-        await asyncio.sleep(c)
-        t += c
-        if door.lock == NukiLockState.unlatched:
-            return # we're done; this will be handled by on_lock_state()
-        elif door.lock == NukiLockState.unlatching:
-            if door.lock_action_event != None:
-                door.logger.info("(timed-unlatched) waited(%i[s]) but still unlatching; assuming it's unlatched", unlatch_timeout)
-                door.on_lock_unlatched()
-                return
-        else:
-            return # lock is not unlatching; we're done
-    door.logger.info("(timed-unlatched) cancel; no lock action event received within %.1f[s]", t)
+    if door.lock == NukiLockState.unlatched:
+        return # we're done; will be handled by on_lock_state
+    
+    if door.lock == NukiLockState.unlatching:
+        door.logger.info("(timed-unlatched) waited(%.1f[s]); assuming it's unlatched", unlatch_time)
+        door.on_lock_unlatched()
+    else:
+        door.logger.debug("(timed-unlatched) cancel; unsuited lock state=%s", door.lock.name)
 
 
 class Relay(DigitalOutputDevice):
@@ -168,9 +157,6 @@ class ElectricDoor:
     _nuki_doorsensor: NukiDoorsensorState
     """The current Nuki door sensor state"""
 
-    _nuki_action: NukiLockAction | None
-    """The last issued Nuki lock action, or None if no action was issued"""
-
     _nuki_action_event: None | NukiLockActionEvent
     """Last received Nuki lock action event"""
 
@@ -210,7 +196,6 @@ class ElectricDoor:
         self._nuki_device = config.nuki_device
         self._nuki_state = NukiLockState.undefined
         self._nuki_doorsensor = NukiDoorsensorState.unknown
-        self._nuki_action = None
         self._nuki_action_event = None
         self._pushbutton = PushButton(config.gpio_pushbutton, self, bounce_time=1.0)
         self._pushbutton.when_pressed = pushbutton_pressed
@@ -261,11 +246,10 @@ class ElectricDoor:
         self._openhold_mode.off()
         self._openclose_mode.on()
         self.run_coroutine(timed_door_closed(self, self._door_open_time, self._door_close_time))
-        self.request_lock_action(NukiLockAction.unlock) # reset 'unlatch' request
 
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
-                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+                self._mqtt, self.nuki_device, name, self.logger, state))
             
         self.run_coroutine(mqtt_publish_sesami_version(
             self._mqtt, self.nuki_device, self.logger, self.version))
@@ -308,26 +292,6 @@ class ElectricDoor:
         self._nuki_state = state
 
     @property
-    def lock_action(self) -> NukiLockAction | None:
-        """Get | set the requested Nuki lock action"""
-        return self._nuki_action
-
-    @lock_action.setter
-    def lock_action(self, action: NukiLockAction):
-        if self._nuki_action == action:
-            return
-        self.logger.info("(lock_action) %s -> %s", self._nuki_action.name if self._nuki_action else None, action.name)
-        self._nuki_action = action
-
-    @property
-    def lock_action_event(self) -> NukiLockActionEvent | None:
-        """Get the Nuki lock action event (if any)
-        
-        Will be reset (to None) when the event has been processed.
-        """
-        return self._nuki_action_event
-
-    @property
     def sensor(self) -> NukiDoorsensorState:
         """Get | set the Nuki door sensor state"""
         return self._nuki_doorsensor
@@ -352,8 +316,6 @@ class ElectricDoor:
             self._mqtt, self.nuki_device, self.logger, state))
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, self.mode))
-        if state == DoorState.closed and self.lock_action == NukiLockAction.unlatch:
-            self.request_lock_action(NukiLockAction.unlock) # cancel the 'unlatch' request
 
     @property
     def state_changed_time(self) -> datetime.datetime:
@@ -402,7 +364,7 @@ class ElectricDoor:
         self._openclose_mode.off()
         for name, state in [('opendoor', 0), ('openhold', 1), ('openclose', 0)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
-                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+                self._mqtt, self.nuki_device, name, self.logger, state))
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openhold))
 
@@ -415,7 +377,7 @@ class ElectricDoor:
         self._openclose_mode.on()
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
-                self._mqtt, self.nuki_device, name, self.logger, state, retain=True))
+                self._mqtt, self.nuki_device, name, self.logger, state))
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
@@ -439,29 +401,23 @@ class ElectricDoor:
         4. lock changes state to unlatched. problem is, that this is sometimes not reported
         5. if the unlatched lock state is not received within a certain time; assume it is
         6. door is opened
-        
         """
-        if not self._nuki_action_event:
-            self.logger.info("(unlatch) ignored; missing lock action event")
-            return
+        ev = self._nuki_action_event
 
-        if self._nuki_action_event.action != NukiLockAction.unlatch:
-            open_door = False
-        elif self._nuki_action_event.trigger == NukiLockTrigger.system_bluetooth:
+        if self._lock_unlatch_requested:
             open_door = True
-        elif self._nuki_action_event.trigger == NukiLockTrigger.mqtt and self._lock_unlatch_requested:
+        elif ev and ev.action == NukiLockAction.unlatch and ev.trigger == NukiLockTrigger.system_bluetooth:
             open_door = True
         else:
             open_door = False
 
         if not open_door:
-            ev = self._nuki_action_event
             self.logger.warning("(unlatch) ignored; action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
-                ev.action.name,
-                ev.trigger.name,
-                ev.auth_id,
-                ev.code_id,
-                ev.auto_unlock,
+                ev.action.name if ev else '?',
+                ev.trigger.name if ev else '?',
+                ev.auth_id if ev else 0,
+                ev.code_id if ev else 0,
+                ev.auto_unlock if ev else 0,
                 self._lock_unlatch_requested
             )
 
@@ -539,8 +495,8 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
         return DoorState.openhold if state == DoorState.closed else DoorState.closed
 
     def on_pushbutton_pressed(self):
-        self.state = self._next_door_state(self.state)
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
+        self.state = self._next_door_state(self.state)
         if self.state == DoorState.openhold:
             self.unlatch() # open the door once lock is unlatched
         else:
@@ -556,8 +512,8 @@ class ElectricDoorPushbuttonOpen(ElectricDoor):
         super().__init__(logger, config, version)
 
     def on_pushbutton_pressed(self):
-        self.state = DoorState.opened
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
+        self.state = DoorState.opened
         self.unlatch() # open the door once lock is unlatched
 
 
@@ -575,8 +531,8 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
         return DoorState((state + 1) % len(DoorState))
 
     def on_pushbutton_pressed(self):
-        self.state = self._next_door_state(self.state)
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
+        self.state = self._next_door_state(self.state)
         if self.state == DoorState.closed:
             self.unlatch() # open the door once lock is unlatched
         elif self.state == DoorState.opened:
@@ -593,7 +549,8 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
         if topic == f"nuki/{door.nuki_device}/state":
             door.on_lock_state(NukiLockState(int(payload)))
         elif topic == f"nuki/{door.nuki_device}/lockAction":
-            door.lock_action = NukiLockAction(int(payload))
+            action = NukiLockAction(int(payload))
+            door.logger.info("(lock_action) %s", action.name)
         elif topic == f"nuki/{door.nuki_device}/lockActionEvent":
             ev = [int(e) for e in payload.split(',')]
             action = NukiLockAction(ev[0])
