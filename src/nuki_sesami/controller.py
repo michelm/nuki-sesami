@@ -104,15 +104,17 @@ async def timed_lock_unlatched(door, unlatch_time:float=4.0):
     - check_interval: The interval (in [s]) to check if the lock is unlatched
     """
     await asyncio.sleep(unlatch_time)
+    t = unlatch_time
+    unlatch_timeout = unlatch_time * 2
 
-    if door.lock == NukiLockState.unlatched:
-        return # we're done; will be handled by on_lock_state
-    
-    if door.lock == NukiLockState.unlatching:
-        door.logger.info("(timed-unlatched) waited(%.1f[s]); assuming it's unlatched", unlatch_time)
-        door.on_lock_unlatched()
-    else:
-        door.logger.debug("(timed-unlatched) cancel; unsuited lock state=%s", door.lock.name)
+    while t < unlatch_timeout:
+        if door.lock != NukiLockState.unlatching:
+            return
+        if door.on_lock_unlatched():
+            return
+        await asyncio.sleep(0.5)
+        t += 0.5
+    door.logger.debug("(timed-unlatched) timedout(%.1f); lock=%s", t, door.lock.name)
 
 
 class Relay(DigitalOutputDevice):
@@ -391,7 +393,7 @@ class ElectricDoor:
         elif lock == NukiLockState.unlatched:
             self.on_lock_unlatched()
 
-    def on_lock_unlatched(self):
+    def on_lock_unlatched(self) -> bool:
         """Opens the door if the lock does become unlatched but has been requested to do so
         
         The assumed sequence of events:
@@ -401,34 +403,39 @@ class ElectricDoor:
         4. lock changes state to unlatched. problem is, that this is sometimes not reported
         5. if the unlatched lock state is not received within a certain time; assume it is
         6. door is opened
+
+        Returns:
+        - True if the door is opened
         """
         ev = self._nuki_action_event
 
         if self._lock_unlatch_requested:
             open_door = True
-        elif ev and ev.action == NukiLockAction.unlatch and ev.trigger == NukiLockTrigger.system_bluetooth:
+        elif ev and ev.action == NukiLockAction.unlatch:
             open_door = True
         else:
             open_door = False
 
         if not open_door:
-            self.logger.warning("(unlatch) ignored; action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i",
+            self.logger.debug("(unlatch) ignored; action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i, requested=%i, lock=%s",
                 ev.action.name if ev else '?',
                 ev.trigger.name if ev else '?',
                 ev.auth_id if ev else 0,
                 ev.code_id if ev else 0,
                 ev.auto_unlock if ev else 0,
-                self._lock_unlatch_requested
+                self._lock_unlatch_requested,
+                self.lock.name
             )
+            return False
 
         self._nuki_action_event = None
         self._lock_unlatch_requested = False
 
-        if open_door:
-            if self.state == DoorState.openhold:
-                self.openhold()
-            else:
-                self.open()
+        if self.state == DoorState.openhold:
+            self.openhold()
+        else:
+            self.open()
+        return True
 
     def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
         self.logger.info("(lock_action_event) action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i",
