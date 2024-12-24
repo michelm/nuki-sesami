@@ -9,7 +9,7 @@ import sys
 from nuki_sesami.state import DoorRequestState
 
 
-async def send_alive(writer: asyncio.StreamWriter, addr: str, channel:int, logger: logging.Logger):
+async def send_alive(writer: asyncio.StreamWriter, addr: str, channel:int, logger: logging.Logger) -> None:
     logger.info('send[%s, ch=%i] alive', addr, channel)
     msg = json.dumps({"jsonrpc": "2.0", "method": "alive"})
     writer.write(str(msg + '\n').encode())
@@ -17,20 +17,20 @@ async def send_alive(writer: asyncio.StreamWriter, addr: str, channel:int, logge
 
 
 async def send_door_request(writer: asyncio.StreamWriter, state: DoorRequestState, addr: str,
-                            channel:int, logger: logging.Logger):
+                            channel:int, logger: logging.Logger) -> None:
     logger.info('send[%s, ch=%i] door_request(%s:%i)', addr, channel, state.name, state.value)
     msg = json.dumps({"jsonrpc": "2.0", "method": "set", "params": {"door_request_state":state.value}})
     writer.write(str(msg + '\n').encode())
     await writer.drain()
 
 
-async def send_alives(writer: asyncio.StreamWriter, logger: logging.Logger, addr: str, channel: int):
+async def send_alives(writer: asyncio.StreamWriter, logger: logging.Logger, addr: str, channel: int) -> None:
     while True:
         await send_alive(writer, addr, channel, logger)
         await asyncio.sleep(5)
 
 
-async def send_requests(writer: asyncio.StreamWriter, logger: logging.Logger, addr: str, channel: int):
+async def send_requests(writer: asyncio.StreamWriter, logger: logging.Logger, addr: str, channel: int) -> None:
     while True:
         await send_door_request(writer, DoorRequestState.open, addr, channel, logger)
         await asyncio.sleep(20)
@@ -39,7 +39,7 @@ async def send_requests(writer: asyncio.StreamWriter, logger: logging.Logger, ad
         await send_door_request(writer, DoorRequestState.close, addr, channel, logger)
 
 
-async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, addr: str, channel: int, maxrecv: int):
+async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, addr: str, channel: int, maxrecv: int) -> None:
     n = maxrecv
     c = 0
     while (n < 0) or (c < n):
@@ -51,7 +51,7 @@ async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, a
 
 
 async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: int, request: int,
-                                  test_requests: bool, maxrecv: int):
+                                  test_requests: bool, maxrecv: int) -> None:
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     sock.connect((addr, channel))
     reader, writer = await asyncio.open_connection(sock=sock)
@@ -80,7 +80,7 @@ async def sesami_bluetooth_client(logger: logging.Logger, addr: str, channel: in
     await receive_status(reader, logger, addr, channel, maxrecv)
 
 
-def getlogger(name, level):
+def getlogger(name, level: int) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
     handler = logging.StreamHandler(sys.stdout)

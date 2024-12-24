@@ -98,7 +98,7 @@ class SesamiConfig:
 def get_config(prefix: str) -> SesamiConfig:
     '''Returns a SesamiConfig instance for the given prefix.
 
-    Parameters:
+    Arguments:
     * prefix: the prefix for the config file, e.g. '/etc/nuki-sesami'
 
     Returns:

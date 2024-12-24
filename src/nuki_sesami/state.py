@@ -2,11 +2,7 @@ from enum import IntEnum
 
 
 class DoorState(IntEnum):
-    """Current (internal) door controller state
-
-    - closed = door is closed or closing,
-    - open = door is open(ing).
-    - openhold = door is open(ing) and will be held open.
+    '''Current (internal) door controller state.
 
     >>> int(DoorState.closed) == 0
     True
@@ -14,36 +10,32 @@ class DoorState(IntEnum):
     True
     >>> int(DoorState.openhold) == 2
     True
-    """
-    closed      = 0 
+    '''
+    closed      = 0
+    '''Door is closed or closing'''
     opened      = 1
+    '''Door is open or opening'''
     openhold    = 2
+    '''Door is open or openning and will be held open'''
 
 
 class DoorMode(IntEnum):
-    """Current operating mode of the doorcontroller
-
-    - openclose = door is open for a brief moment, the actual time is defined
-    by the ERREKA 'Smart Evolution' electric door controller.
-    - openhold = door will be held open until the pushbutton is pressed again.
+    '''Current operating mode of the doorcontroller.
     
     >>> int(DoorMode.openclose) == 0
     True
     >>> int(DoorMode.openhold) == 1
     True
-    """
+    '''
     openclose       = 0
+    '''Open the door for a brief moment and then close it again'''
     openhold        = 1
+    '''Open the door and hold it open untill this mode ends'''
 
 
 class DoorRequestState(IntEnum):
-    """Requested door state as received from Smartphone
+    '''Requested door state as received from Smartphone.
 
-    - none = no request.
-    - close = close the door.
-    - open = open the door briefly and then close it.
-    - openhold = open the door and hold it open.
-    
     >>> int(DoorRequestState.none) == 0
     True
     >>> int(DoorRequestState.close) == 1
@@ -52,32 +44,35 @@ class DoorRequestState(IntEnum):
     True
     >>> int(DoorRequestState.openhold) == 3
     True
-    """
+    '''
     none            = 0
+    '''No request'''
     close           = 1
+    '''Request to close the door'''
     open            = 2
+    '''Request to open the door'''
     openhold        = 3
+    '''Request to open the door and hold it open'''
 
 
 class PushbuttonLogic(IntEnum):
-    """Defines how the pushbutton logic and how the door will react
+    '''Defines how the pushbutton logic and how the door will react.
     
-    - openhold = press once to open the door and hold it open, press again to
-    close the door.
-    - open = press once to open the door, the door will close automatically
-    after a short time.
-    - toggle = toggle between 'open' and 'openhold' door modes.
-
     >>> int(PushbuttonLogic.openhold) == 0
     True
     >>> int(PushbuttonLogic.open) == 1
     True
     >>> int(PushbuttonLogic.toggle) == 2
     True
-    """
+    '''
     openhold    = 0
+    '''Press once to open the door and hold it open, press again to
+    close the door.'''
     open        = 1
+    '''Press once to open the door, the door will close automatically
+    after a short time.'''
     toggle      = 2
+    '''Toggle between 'open' and 'openhold' door modes.'''
 
 
 if __name__ == "__main__":

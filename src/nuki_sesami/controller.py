@@ -24,45 +24,45 @@ from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, PushbuttonL
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 
-async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction):
+async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction) -> None:
     topic = f"nuki/{device}/lockAction"
     logger.info('[mqtt] publish %s=%s:%i', topic, action.name, action.value)
     await client.publish(topic, action.value, retain=False)
 
 
-async def mqtt_publish_sesami_version(client: aiomqtt.Client, device: str, logger: Logger, version: str):
+async def mqtt_publish_sesami_version(client: aiomqtt.Client, device: str, logger: Logger, version: str) -> None:
     topic = f"sesami/{device}/version"
     logger.info('[mqtt] publish %s=%s (retain)', topic, version)
     await client.publish(topic, version, retain=True)
 
 
-async def mqtt_publish_sesami_state(client: aiomqtt.Client, device: str, logger: Logger, state: DoorState):
+async def mqtt_publish_sesami_state(client: aiomqtt.Client, device: str, logger: Logger, state: DoorState) -> None:
     topic = f"sesami/{device}/state"
     logger.info('[mqtt] publish %s=%s:%i (retain)', topic, state.name, state.value)
     await client.publish(topic, state.value, retain=True)
 
 
-async def mqtt_publish_sesami_mode(client: aiomqtt.Client, device: str, logger: Logger, state: DoorMode):
+async def mqtt_publish_sesami_mode(client: aiomqtt.Client, device: str, logger: Logger, state: DoorMode) -> None:
     topic = f"sesami/{device}/mode"
     logger.info('[mqtt] publish %s=%s:%i (retain)', topic, state.name, state.value)
     await client.publish(topic, state.value, retain=True)
 
 
 async def mqtt_publish_sesami_relay_state(client: aiomqtt.Client, device: str, name: str,
-                                          logger: Logger, state: int, retain=True):
+                                          logger: Logger, state: int, retain=True) -> None:
     topic = f"sesami/{device}/relay/{name}"
     logger.info('[mqtt] publish %s=%i%s', topic, state, " (retain)" if retain else "")
     await client.publish(topic, state, retain=retain)
 
 
-async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, device: str, logger: Logger):
+async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, device: str, logger: Logger) -> None:
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 1)
     await asyncio.sleep(1)
     await mqtt_publish_sesami_relay_state(client, device, 'opendoor', logger, 0)
 
 
-async def timed_door_closed(door, open_time:float, close_time:float, check_interval:float=3.0):
-    """Verifies and corrects the (logical) door state to closed when needed.
+async def timed_door_closed(door, open_time:float, close_time:float, check_interval:float=3.0) -> None:
+    '''Verifies and corrects the (logical) door state to closed when needed.
     
     Sometimes when opening the door, the door state is not updated to closed once the
     door (physically) has closed since the door sensor has failed to detect it. In this case
@@ -78,7 +78,7 @@ async def timed_door_closed(door, open_time:float, close_time:float, check_inter
     - open_time: The time (in [s]) needed to open and close the door
     - close_time: The time (in [s]) needed to close the door when ending openhold mode
     - check_interval: The check interval (in [s]) for the door state
-    """
+    '''
     while True:
         await asyncio.sleep(check_interval)
         dt = datetime.datetime.now() - door.state_changed_time
@@ -92,8 +92,8 @@ async def timed_door_closed(door, open_time:float, close_time:float, check_inter
                 door.state = DoorState.closed
 
 
-async def timed_lock_unlatched(door, unlatch_time:float=4.0):
-    """Verifies the lock unlatches; i.e. changes state to unlatched, when it is
+async def timed_lock_unlatched(door, unlatch_time:float=4.0) -> None:
+    '''Verifies the lock unlatches; i.e. changes state to unlatched, when it is
     instructed to do so. Triggers the door to open in case the lock is still unlatching
     after the unlatch timeout has been reached and an (associated) action event has
     been received.
@@ -102,7 +102,7 @@ async def timed_lock_unlatched(door, unlatch_time:float=4.0):
     - door: The electric door instance
     - unlatch_time: The time (in [s]) to wait before checking the lock is unlatched
     - check_interval: The interval (in [s]) to check if the lock is unlatched
-    """
+    '''
     await asyncio.sleep(unlatch_time)
     t = unlatch_time
     unlatch_timeout = unlatch_time * 2
@@ -128,69 +128,59 @@ class PushButton(Button):
         self.userdata = userdata
 
 
-def pushbutton_held(button):
-    door = button.userdata
-    door.logger.info("(input) door (open/hold/close) push button %s is held", button.pin)
-
-
-def pushbutton_pressed(button):
+def pushbutton_pressed(button: PushButton) -> None:
     door = button.userdata
     door.logger.info("(input) door (open/hold/close) push button %s is pressed", button.pin)
     door.on_pushbutton_pressed()
 
 
-def pushbutton_released(button):
-    door = button.userdata
-    door.logger.info("(input) door (open/hold/close) push button %s is released", button.pin)
-
-
 class ElectricDoor:
-    '''Opens an electric door based on the Nuki smart lock state
+    '''Opens an electric door based on the Nuki smart lock state.
 
     Subscribes as client to MQTT door status topic from 'Nuki 3.0 pro' smart lock. When the lock has been opened
     it will activate a relay, e.g. using the 'RPi Relay Board', triggering the electric door to open.
     '''
     _nuki_device: str
-    """The hexadecimal Nuki device ID"""
+    '''The hexadecimal Nuki device ID'''
 
     _nuki_state: NukiLockState
-    """The current Nuki lock state"""
+    '''The current Nuki lock state'''
 
     _nuki_doorsensor: NukiDoorsensorState
-    """The current Nuki door sensor state"""
+    '''The current Nuki door sensor state'''
 
     _nuki_action_event: None | NukiLockActionEvent
-    """Last received Nuki lock action event"""
+    '''Last received Nuki lock action event'''
 
     _pushbutton: PushButton
-    """GPIO input for the pusbbutton; change door state(open/close/openhold) when pressed"""
+    '''GPIO input for the pusbbutton; change door state(open/close/openhold) when pressed'''
 
     _opendoor: Relay
-    """GPIO Relay for opening the door (momentarily); uses normally open relay (NO)"""
+    '''GPIO Relay for opening the door (momentarily); uses normally open relay (NO)'''
 
     _openhold_mode: Relay
-    """GPIO Relay for holding the door open; uses normally open relay (NO)"""
+    '''GPIO Relay for holding the door open; uses normally open relay (NO)'''
 
     _openclose_mode: Relay
-    """GPIO Relay for closing the door; uses normally open relay (NO)"""
+    '''GPIO Relay for closing the door; uses normally open relay (NO)'''
 
     _state: DoorState
-    """The current door state"""
+    '''The current door state'''
     
     _state_changed: datetime.datetime
-    """Timestamp when the door state was last changed"""
+    '''Timestamp when the door state was last changed'''
 
     _door_open_time: int
-    """The estimated time, in seconds, for the door to open and close"""
+    '''The estimated time, in seconds, for the door to open and close'''
 
     _door_close_time: int
-    """The estimated time, in seconds, for the door close when ending openhold mode"""
+    '''The estimated time, in seconds, for the door close when ending openhold mode'''
 
     _lock_unlatch_time: int
-    """The estimated time, in seconds, for the lock to move from locked or latched to unlatched"""
+    '''The estimated time, in seconds, for the lock to move from locked or latched to unlatched'''
     
     _lock_unlatch_requested: bool
-    """True if the lock was requested to unlatch"""
+    '''True if the lock was requested to unlatch'''
     
     def __init__(self, logger: Logger, config: SesamiConfig, version: str):
         self._logger = logger
@@ -212,7 +202,7 @@ class ElectricDoor:
         self._lock_unlatch_requested = False
         self._background_tasks = set()
 
-    def run_coroutine(self, coroutine):
+    def run_coroutine(self, coroutine) -> None:
         '''Wraps the coroutine into a task and schedules its execution
 
         The task will be added to the set of background tasks.
@@ -233,7 +223,7 @@ class ElectricDoor:
         except RuntimeError:
             asyncio.run_coroutine_threadsafe(coroutine, self.loop)
 
-    def activate(self, client: aiomqtt.Client, loop: asyncio.AbstractEventLoop):
+    def activate(self, client: aiomqtt.Client, loop: asyncio.AbstractEventLoop) -> None:
         '''Activates the electric door logic
 
         Initializes GPIO to pins to default state, publishes initial (relay) states
@@ -276,17 +266,17 @@ class ElectricDoor:
 
     @property
     def version(self) -> str:
-        """The Nuki Sesami version (major.minor.patch)"""
+        '''The Nuki Sesami version (major.minor.patch)'''
         return self._version
 
     @property
     def nuki_device(self) -> str:
-        """The hexadecimal Nuki device ID"""
+        '''The hexadecimal Nuki device ID'''
         return self._nuki_device
 
     @property
     def lock(self) -> NukiLockState:
-        """Get | set the Nuki lock state"""
+        '''Get | set the Nuki lock state'''
         return self._nuki_state
 
     @lock.setter
@@ -295,7 +285,7 @@ class ElectricDoor:
 
     @property
     def sensor(self) -> NukiDoorsensorState:
-        """Get | set the Nuki door sensor state"""
+        '''Get | set the Nuki door sensor state'''
         return self._nuki_doorsensor
 
     @sensor.setter
@@ -304,7 +294,7 @@ class ElectricDoor:
 
     @property
     def state(self) -> DoorState:
-        """Get | set the current door state"""
+        '''Get | set the current door state'''
         return self._state
 
     @state.setter
@@ -321,12 +311,12 @@ class ElectricDoor:
 
     @property
     def state_changed_time(self) -> datetime.datetime:
-        """Timestamp when the door state was last changed"""
+        '''Timestamp when the door state was last changed.'''
         return self._state_changed
 
     @property
     def mode(self) -> DoorMode:
-        """Returns the current door mode"""
+        '''Returns the current door mode.'''
         return DoorMode.openhold if self._state == DoorState.openhold else DoorMode.openclose
 
     @property
@@ -337,29 +327,29 @@ class ElectricDoor:
     def gpio_openclose_set(self) -> bool:
         return self._openclose_mode.value != 0
 
-    def request_lock_action(self, action: NukiLockAction):
+    def request_lock_action(self, action: NukiLockAction) -> None:
         self.logger.info("(lock) request action=%s", action.name)
         self.run_coroutine(mqtt_publish_nuki_lock_action(self._mqtt, self.nuki_device, self.logger, action))
 
-    def unlatch(self):
+    def unlatch(self) -> None:
         if self.lock in [NukiLockState.unlatching]:
             return
         self.logger.info("(unlatch) state=%s, lock=%s", self.state.name, self.lock.name)
         self.request_lock_action(NukiLockAction.unlatch)
         self._lock_unlatch_requested = True
 
-    def unlock(self):
+    def unlock(self) -> None:
         self.logger.info("(unlock) state=%s, lock=%s", self.state.name, self.lock.name)
         self.request_lock_action(NukiLockAction.unlock)
 
-    def open(self):
+    def open(self) -> None:
         self.logger.info("(open) state=%s, lock=%s", self.state.name, self.lock.name)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
         self.run_coroutine(mqtt_publish_sesami_relay_opendoor_blink(
             self._mqtt, self.nuki_device, self.logger))
 
-    def openhold(self):
+    def openhold(self) -> None:
         self.logger.info("(openhold) state=%s, lock=%s", self.state.name, self.lock.name)
         self.logger.info("(relay) openhold(1), openclose(0)")
         self._openhold_mode.on()
@@ -370,7 +360,7 @@ class ElectricDoor:
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openhold))
 
-    def close(self):
+    def close(self) -> None:
         self.logger.info("(close) state=%s, lock=%s", self.state.name, self.lock.name)
         if self.lock in [NukiLockState.locked, NukiLockState.locking]:
             self.unlock()
@@ -383,7 +373,7 @@ class ElectricDoor:
         self.run_coroutine(mqtt_publish_sesami_mode(
             self._mqtt, self.nuki_device, self.logger, DoorMode.openclose))
 
-    def on_lock_state(self, lock: NukiLockState):
+    def on_lock_state(self, lock: NukiLockState) -> None:
         self.logger.info("(lock_state) %s -> %s", self.lock.name, lock.name)
         self.lock = lock
 
@@ -394,7 +384,7 @@ class ElectricDoor:
             self.on_lock_unlatched()
 
     def on_lock_unlatched(self) -> bool:
-        """Opens the door if the lock does become unlatched but has been requested to do so
+        '''Opens the door if the lock does become unlatched but has been requested to do so
         
         The assumed sequence of events:
         1. request lock to unlatch; this can be from nuki-sesami(mqtt) or phone(bluetooth)
@@ -406,7 +396,7 @@ class ElectricDoor:
 
         Returns:
         - True if the door is opened
-        """
+        '''
         ev = self._nuki_action_event
 
         if self._lock_unlatch_requested:
@@ -437,12 +427,12 @@ class ElectricDoor:
             self.open()
         return True
 
-    def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool):
+    def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool) -> None:
         self.logger.info("(lock_action_event) action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i",
             action.name, trigger.name, auth_id, code_id, auto_unlock)
         self._nuki_action_event = NukiLockActionEvent(action, trigger, auth_id, code_id, auto_unlock)
 
-    def on_doorsensor_state(self, sensor: NukiDoorsensorState):
+    def on_doorsensor_state(self, sensor: NukiDoorsensorState) -> None:
         self.logger.info("(doorsensor_state) %s -> %s", self.sensor.name, sensor.name)
         self.sensor = sensor
         if sensor == NukiDoorsensorState.door_closed and self.state == DoorState.opened:
@@ -450,7 +440,7 @@ class ElectricDoor:
         if sensor == NukiDoorsensorState.door_opened and self.state == DoorState.closed:
             self.state = DoorState.opened
 
-    def on_door_request(self, request: DoorRequestState):
+    def on_door_request(self, request: DoorRequestState) -> None:
         '''Process a requested door state received from the MQTT broker.
 
         The Door request state is used to open/close the door and/or hold the door
@@ -486,12 +476,12 @@ class ElectricDoor:
             self.state = DoorState.openhold
             self.unlatch() # open the door (and hold it open) once lock is unlatched
 
-    def on_pushbutton_pressed(self):
+    def on_pushbutton_pressed(self) -> None:
         self.logger.info("(%s.pushbutton_pressed)", self.classname)
 
 
 class ElectricDoorPushbuttonOpenHold(ElectricDoor):
-    '''Electric door with pushbutton 'open and hold' logic
+    '''Electric door with pushbutton 'open and hold' logic.
 
     When pressing the pushbutton the door will be opened and held open until the pushbutton is pressed again.
     '''
@@ -501,7 +491,7 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
     def _next_door_state(self, state: DoorState) -> DoorState:
         return DoorState.openhold if state == DoorState.closed else DoorState.closed
 
-    def on_pushbutton_pressed(self):
+    def on_pushbutton_pressed(self) -> None:
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         self.state = self._next_door_state(self.state)
         if self.state == DoorState.openhold:
@@ -511,21 +501,21 @@ class ElectricDoorPushbuttonOpenHold(ElectricDoor):
 
 
 class ElectricDoorPushbuttonOpen(ElectricDoor):
-    '''Electric door with pushbutton open logic
+    '''Electric door with pushbutton open logic.
 
     When pressing the pushbutton the door will be opened for a few seconds after which it will be closed again.
     '''
     def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
         super().__init__(logger, config, version)
 
-    def on_pushbutton_pressed(self):
+    def on_pushbutton_pressed(self) -> None:
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         self.state = DoorState.opened
         self.unlatch() # open the door once lock is unlatched
 
 
 class ElectricDoorPushbuttonToggle(ElectricDoor):
-    '''Electric door with pushbutton toggle logic
+    '''Electric door with pushbutton toggle logic.
 
     When pressing the pushbutton the door will open, if during the smart lock unlatching
     phase of the pushbutton is pressed again the door will be held open until the pushbutton
@@ -537,7 +527,7 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
     def _next_door_state(self, state: DoorState) -> DoorState:
         return DoorState((state + 1) % len(DoorState))
 
-    def on_pushbutton_pressed(self):
+    def on_pushbutton_pressed(self) -> None:
         self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
         self.state = self._next_door_state(self.state)
         if self.state == DoorState.closed:
@@ -548,7 +538,7 @@ class ElectricDoorPushbuttonToggle(ElectricDoor):
             pass # no action here
 
 
-async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
+async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor) -> None:
     async for msg in client.messages:
         payload = msg.payload.decode()
         topic = str(msg.topic)
@@ -569,7 +559,7 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor):
             door.on_door_request(DoorRequestState(int(payload)))
 
 
-async def activate(logger: Logger, config: SesamiConfig, version: str):
+async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
     if config.pushbutton == PushbuttonLogic.open:
         door = ElectricDoorPushbuttonOpen(logger, config, version)
     elif config.pushbutton == PushbuttonLogic.toggle:

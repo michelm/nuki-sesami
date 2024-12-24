@@ -14,10 +14,10 @@ def is_virtual_env() -> bool:
 def getlogger(name: str, path: str, level: int = logging.INFO) -> Logger:
     '''Returns a logger instance for the given name and path.
 
-    The logger for will rotating log files with a maximum size of 1MB and
-    a maximum of 10 log files.
+    The logger will use rotating log files with a maximum size of 1MB each
+    and upto a maximum of 10 log files.
 
-    Parameters:
+    Arguments:
     * name: name of the logger, e.g. 'nuki-sesami'
     * path: complete path for storing the log files, e.g. '/var/log/nuki-sesami'
     * level: logging level, e.g; logging.DEBUG
@@ -44,11 +44,10 @@ def run(cmd: list[str], logger: Logger, check: bool) -> None:
     Throws a subprocess.CalledProcessError when check is True and the command
     fails.
 
-    Parameters:
+    Arguments:
     * cmd: command to run, e.g. ['ls', '-l']
     * logger: logger instance
     * check: True to throw an exception when the command fails
-
     '''
     logger.info("run '%s'", ' '.join(cmd) if isinstance(cmd, list) else cmd)
     try:

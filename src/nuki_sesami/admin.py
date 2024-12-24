@@ -52,13 +52,14 @@ def get_systemd_service_fname(prefix: str, name: str) -> str:
 
 
 def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> None:
-    '''Creates a config file for nuki-sesami services
+    '''Creates a config file for nuki-sesami services.
 
-    Write nuki lock device id, mqtt broker host and port, and bluetooth settings
-    to configuration file (<prefix>/nuki-sesami/config.json)
+    Writes the nuki lock device id, mqtt broker host and port, and bluetooth settings
+    to configuration file (<prefix>/nuki-sesami/config.json).
 
-    Parameters:
+    Arguments:
     * logger: Logger, the logger
+    * cpath: str, the configuration path; e.g. '/etc/nuki-sesami'
     * args: argparse.Namespace, the command line arguments
     '''
     if not args.device:
@@ -110,12 +111,13 @@ def create_config_file(logger: Logger, cpath: str, args: argparse.Namespace) -> 
 
 
 def create_auth_file(logger: Logger, cpath: str, username: str, password: str) -> None:
-    '''Creates an auth file for nuki-sesami
+    '''Creates an auth file for nuki-sesami.
 
-    The file contains the MQTT username and password.
+    The auth file contains the MQTT username and password.
 
-    Parameters:
+    Arguments:
     * logger: Logger, the logger
+    * cpath: str, the configuration path; e.g. '/etc/nuki-sesami'
     * username: str, the MQTT username
     * password: str, the MQTT password
     '''
@@ -148,14 +150,15 @@ def create_auth_file(logger: Logger, cpath: str, username: str, password: str) -
 
 
 def create_clients_file(logger: Logger, cpath: str) -> None:
-    '''Creates a (bluetooth) clients file for nuki-sesami services
+    '''Creates a (bluetooth) clients file for nuki-sesami services.
 
     The file contains a list of bluetooth clients. Each entry consists of
     a the client's mac address and a public key used by that client when
     signing messages.
 
-    Parameters:
+    Arguments:
     * logger: Logger, the logger
+    * cpath: str, the configuration path; e.g. '/etc/nuki-sesami'
     '''
     fname = os.path.join(cpath, 'clients.json')
     if os.path.exists(fname):
@@ -179,12 +182,12 @@ def create_clients_file(logger: Logger, cpath: str) -> None:
 
 
 def create_systemd_service(logger: Logger, prefix: str, cpath: str, name: str, dryrun: bool) -> None:
-    '''Creates and start a systemd service for nuki-sesami
+    '''Create and start a systemd service for nuki-sesami.
 
     Creates the systemd service file, reloads the systemd daemon and
     starts the service.
 
-    Parameters:
+    Arguments:
     * logger: Logger, the logger
     * prefix: str, the system root; e.g. '/'
     * cpath: str, the configuration path; e.g. '/etc/nuki-sesami'
@@ -226,9 +229,9 @@ def create_systemd_service(logger: Logger, prefix: str, cpath: str, name: str, d
 
 
 def services_install(logger: Logger, prefix: str, cpath: str, args: argparse.Namespace) -> None:
-    '''Create nuki-sesami config files and installs systemd services
+    '''Create nuki-sesami config files and installs systemd services.
 
-    Parameters:
+    Arguments:
     * logger: Logger, the logger
     * prefix: str, the system root; e.g. '/'
     * cpath: str, the configuration path; e.g. '/etc/nuki-sesami'
@@ -242,7 +245,7 @@ def services_install(logger: Logger, prefix: str, cpath: str, args: argparse.Nam
 
 
 def systemd_service_remove(logger: Logger, prefix: str, systemctl: list[str], name: str) -> None:
-    '''Removes a systemd service
+    '''Removes a systemd service.
     '''
     run([*systemctl, "stop", name], logger, check=False)
     run([*systemctl, "disable", name], logger, check=False)
@@ -251,7 +254,7 @@ def systemd_service_remove(logger: Logger, prefix: str, systemctl: list[str], na
 
 
 def services_remove(logger: Logger, prefix: str, dryrun: bool) -> None:
-    '''Removes all nuki-sesami related systemd services
+    '''Removes all nuki-sesami related systemd services.
     '''
     systemctl = get_systemctl(dryrun)
     systemd_service_remove(logger, prefix, systemctl, 'nuki-sesami')
