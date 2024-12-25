@@ -29,5 +29,5 @@ nuki-sesami-bluez = "nuki_sesami.bluetooth:main"
 nuki-sesami-bluetest = "nuki_sesami.bluetooth_client:main"
 
 [project.urls]
-"Source Code" = "https://github.com/michelm/nuki-sesami"
-"Issue Tracker" = "https://github.com/michelm/nuki-sesami/issues"
+"Homepage" = "https://github.com/michelm/nuki-sesami"
+"Issues" = "https://github.com/michelm/nuki-sesami/issues"
