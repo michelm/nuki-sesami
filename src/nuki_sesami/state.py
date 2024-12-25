@@ -19,6 +19,19 @@ class DoorState(IntEnum):
     '''Door is open or openning and will be held open'''
 
 
+class DoorOpenTrigger(IntEnum):
+    '''Indicates the reason for opening the door.
+
+    >>> int(DoorOpenTrigger.unlatch_timeout) == 0
+    True
+    >>> int(DoorOpenTrigger.lock_unlatched) == 1
+    True
+    '''
+    unlatch_timeout = 0
+    '''Door opened due to a lock unlatch timeout'''
+    lock_unlatched  = 1
+    '''Door opened after the lock has unlatched'''
+
 class DoorMode(IntEnum):
     '''Current operating mode of the doorcontroller.
     

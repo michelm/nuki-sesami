@@ -20,7 +20,7 @@ from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState, NukiLockTrigger, NukiLockActionEvent
-from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, PushbuttonLogic
+from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, DoorOpenTrigger, PushbuttonLogic
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 
@@ -105,7 +105,7 @@ async def timed_lock_unlatched(door, unlatch_time:float=4.0) -> None:
     await asyncio.sleep(unlatch_time)
     if door.lock != NukiLockState.unlatching:
         return
-    door.on_lock_unlatched()
+    door.on_lock_unlatched(DoorOpenTrigger.unlatch_timeout)
 
 
 class Relay(DigitalOutputDevice):
@@ -332,15 +332,15 @@ class ElectricDoor:
         self.logger.info("(unlock) state=%s, lock=%s", self.state.name, self.lock.name)
         self.request_lock_action(NukiLockAction.unlock)
 
-    def open(self) -> None:
-        self.logger.info("(open) state=%s, lock=%s", self.state.name, self.lock.name)
+    def open(self, trigger: DoorOpenTrigger) -> None:
+        self.logger.info("(open) state=%s, lock=%s, trigger=%s", self.state.name, self.lock.name, trigger.name)
         self.logger.info("(relay) opendoor(blink 1[s])")
         self._opendoor.blink(on_time=1, off_time=1, n=1, background=True)
         self.run_coroutine(mqtt_publish_sesami_relay_opendoor_blink(
             self._mqtt, self.nuki_device, self.logger))
 
-    def openhold(self) -> None:
-        self.logger.info("(openhold) state=%s, lock=%s", self.state.name, self.lock.name)
+    def openhold(self, trigger: DoorOpenTrigger) -> None:
+        self.logger.info("(openhold) state=%s, lock=%s, trigger=%s", self.state.name, self.lock.name, trigger.name)
         self.logger.info("(relay) openhold(1), openclose(0)")
         self._openhold_mode.on()
         self._openclose_mode.off()
@@ -371,15 +371,15 @@ class ElectricDoor:
             self.run_coroutine(timed_lock_unlatched(self, self._lock_unlatch_time))
 
         elif lock == NukiLockState.unlatched:
-            self.on_lock_unlatched()
+            self.on_lock_unlatched(DoorOpenTrigger.lock_unlatched)
 
-    def on_lock_unlatched(self) -> None:
+    def on_lock_unlatched(self, trigger: DoorOpenTrigger) -> None:
         '''Opens the door if the lock is unlatched, or assumed to be unlatched.
         '''
         if self.state == DoorState.openhold:
-            self.openhold()
+            self.openhold(trigger)
         else:
-            self.open()
+            self.open(trigger)
 
     def on_lock_action(self, action: NukiLockAction) -> None:
         self.logger.info("(lock_action) action=%s", action.name)
