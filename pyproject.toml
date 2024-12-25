@@ -15,7 +15,7 @@ dependencies = [
     "paho-mqtt>=2.0.0",
     "gpiozero>=2.0.1"
 ]
-requires-python = ">= 3.9"
+requires-python = ">= 3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

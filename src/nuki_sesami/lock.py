@@ -1,5 +1,6 @@
-from enum import IntEnum
 import datetime
+from enum import IntEnum
+
 
 class NukiLockState(IntEnum):
     uncalibrated    = 0
@@ -22,7 +23,7 @@ class NukiLockState(IntEnum):
 
 class NukiLockAction(IntEnum):
     unlock          = 1
-    '''Request unlocked state; activates RTO.'''    
+    '''Request unlocked state; activates RTO.'''
     lock            = 2
     '''Request locked state; deactivates RTO.'''
     unlatch         = 3
@@ -89,4 +90,4 @@ class NukiLockActionEvent:
         self.auth_id = auth_id
         self.code_id = code_id
         self.auto_unlock = auto_unlock
-        self.timestamp = datetime.datetime.now()
+        self.timestamp = datetime.datetime.now(tz=datetime.UTC)

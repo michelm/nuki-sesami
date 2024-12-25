@@ -5,26 +5,28 @@
 # See https://gpiozero.readthedocs.io/en/stable/api_output.html#gpiozero.pins.mock.MockFactory
 # for more information.
 
+from __future__ import annotations
+
 import argparse
 import asyncio
+import datetime
 import importlib.metadata
 import logging
 import os
 import sys
-import datetime
 from logging import Logger
-from typing import List
 
 import aiomqtt
 from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.config import SesamiConfig, get_config
-from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockState, NukiLockTrigger, NukiLockActionEvent
-from nuki_sesami.state import DoorMode, DoorRequestState, DoorState, DoorOpenTrigger, PushbuttonLogic
+from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockActionEvent, NukiLockState, NukiLockTrigger
+from nuki_sesami.state import DoorMode, DoorOpenTrigger, DoorRequestState, DoorState, PushbuttonLogic
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 
-async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str, logger: Logger, action: NukiLockAction) -> None:
+async def mqtt_publish_nuki_lock_action(client: aiomqtt.Client, device: str,
+                                        logger: Logger, action: NukiLockAction) -> None:
     topic = f"nuki/{device}/lockAction"
     logger.info('[mqtt] publish %s=%s:%i', topic, action.name, action.value)
     await client.publish(topic, action.value, retain=False)
@@ -63,13 +65,13 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
 
 async def timed_door_closed(door, open_time:float, close_time:float, check_interval:float=3.0) -> None:
     '''Verifies and corrects the (logical) door state to closed when needed.
-    
+
     Sometimes when opening the door, the door state is not updated to closed once the
     door (physically) has closed since the door sensor has failed to detect it. In this case
     this function will force the door state to closed after a configurable time.
 
     Examples:
-    - When opening the door momentarily (open/close) we expect the door to be closed 
+    - When opening the door momentarily (open/close) we expect the door to be closed
       again within 40 seconds.
     - When ending the 'openhold' mode we expect the door to be closed within 10 seconds.
 
@@ -81,7 +83,7 @@ async def timed_door_closed(door, open_time:float, close_time:float, check_inter
     '''
     while True:
         await asyncio.sleep(check_interval)
-        dt = datetime.datetime.now() - door.state_changed_time
+        dt = datetime.datetime.now(tz=datetime.UTC) - door.state_changed_time
         if door.state == DoorState.opened:
             dt_open = datetime.timedelta(seconds=open_time)
             if dt > dt_open:
@@ -96,7 +98,7 @@ async def timed_lock_unlatched(door, unlatch_time:float=4.0) -> None:
     '''Verifies the lock unlatches; i.e. changes state to unlatched, when it is
     instructed to do so. Triggers the door to open in case the lock is still unlatching
     after the unlatch time(out) has been reached.
-    
+
     Arguments:
     - door: The electric door instance
     - unlatch_time: The time (in [s]) to wait before checking the lock is unlatched
@@ -160,13 +162,13 @@ class ElectricDoor:
 
     _state: DoorState
     '''The current door state'''
-    
+
     _state_changed: datetime.datetime
     '''Timestamp when the door state was last changed'''
 
     _door_opened: bool
     '''Flag indicating the door has (already) been opened. Prevents the open(hold) actions
-    being executed twice in case the unlatch timeout is reached first after which the lock 
+    being executed twice in case the unlatch timeout is reached first after which the lock
     still reaches the unlatched state.
     Will be set when opening door and will be reset when door state is changed to closed.
     '''
@@ -194,7 +196,7 @@ class ElectricDoor:
         self._openhold_mode = Relay(config.gpio_openhold_mode, False)
         self._openclose_mode = Relay(config.gpio_openclose_mode, False)
         self._state = DoorState.closed
-        self._state_changed = datetime.datetime.now()
+        self._state_changed = datetime.datetime.now(tz=datetime.UTC)
         self._door_opened = False
         self._door_open_time = config.door_open_time
         self._door_close_time = config.door_close_time
@@ -241,7 +243,7 @@ class ElectricDoor:
         for name, state in [('opendoor', 0), ('openhold', 0), ('openclose', 1)]:
             self.run_coroutine(mqtt_publish_sesami_relay_state(
                 self._mqtt, self.nuki_device, name, self.logger, state))
-            
+
         self.run_coroutine(mqtt_publish_sesami_version(
             self._mqtt, self.nuki_device, self.logger, self.version))
 
@@ -258,7 +260,7 @@ class ElectricDoor:
     @property
     def logger(self) -> Logger:
         return self._logger
-    
+
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
         return self._loop
@@ -300,11 +302,11 @@ class ElectricDoor:
     def state(self, state: DoorState):
         if state == self._state:
             return
-        if state == DoorState.closed:        
+        if state == DoorState.closed:
             self._door_opened = False
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
         self._state = state
-        self._state_changed = datetime.datetime.now()
+        self._state_changed = datetime.datetime.now(tz=datetime.UTC)
         self.run_coroutine(mqtt_publish_sesami_state(
             self._mqtt, self.nuki_device, self.logger, state))
         self.run_coroutine(mqtt_publish_sesami_mode(
@@ -322,8 +324,8 @@ class ElectricDoor:
 
     @property
     def gpio_openhold_set(self) -> bool:
-        return self._openhold_mode.value != 0 
-    
+        return self._openhold_mode.value != 0
+
     @property
     def gpio_openclose_set(self) -> bool:
         return self._openclose_mode.value != 0
@@ -387,7 +389,7 @@ class ElectricDoor:
         '''Opens the door if the lock is unlatched, or assumed to be unlatched.
         '''
         if self._door_opened:
-            return 
+            return
         self._door_opened = True
 
         if self.state == DoorState.openhold:
@@ -399,7 +401,8 @@ class ElectricDoor:
         self.logger.info("(lock_action) action=%s", action.name)
         self._nuki_action = action
 
-    def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger, auth_id: int, code_id: int, auto_unlock: bool) -> None:
+    def on_lock_action_event(self, action: NukiLockAction, trigger: NukiLockTrigger,
+                             auth_id: int, code_id: int, auto_unlock: bool) -> None:
         self.logger.info("(lock_action_event) action=%s, trigger=%s, auth-id=%i, code-id=%i, auto-unlock=%i",
             action.name, trigger.name, auth_id, code_id, auto_unlock)
         self._nuki_action_event = NukiLockActionEvent(action, trigger, auth_id, code_id, auto_unlock)

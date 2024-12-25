@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import argparse
 import asyncio
 import importlib.metadata
@@ -8,7 +9,6 @@ import os
 import socket
 import sys
 from logging import Logger
-from typing import Dict
 
 import aiomqtt
 
@@ -97,7 +97,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         for m in [s for s in msg.split('\n') if s]:
             self.process_request(m)
 
-    def get_status(self) -> Dict:
+    def get_status(self) -> dict:
         return {
             "nuki": {
                 "lock": self._nuki_lock.value,
@@ -114,7 +114,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
             },
             "version": self._version
         }
-    
+
     def get_jsonrpc_status_notification(self) -> str:
         status = self.get_status()
         return json.dumps({

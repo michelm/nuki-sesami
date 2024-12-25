@@ -39,7 +39,8 @@ async def send_requests(writer: asyncio.StreamWriter, logger: logging.Logger, ad
         await send_door_request(writer, DoorRequestState.close, addr, channel, logger)
 
 
-async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger, addr: str, channel: int, maxrecv: int) -> None:
+async def receive_status(reader: asyncio.StreamReader, logger: logging.Logger,
+                         addr: str, channel: int, maxrecv: int) -> None:
     n = maxrecv
     c = 0
     while (n < 0) or (c < n):

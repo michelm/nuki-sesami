@@ -34,7 +34,7 @@ class DoorOpenTrigger(IntEnum):
 
 class DoorMode(IntEnum):
     '''Current operating mode of the doorcontroller.
-    
+
     >>> int(DoorMode.openclose) == 0
     True
     >>> int(DoorMode.openhold) == 1
@@ -70,7 +70,7 @@ class DoorRequestState(IntEnum):
 
 class PushbuttonLogic(IntEnum):
     '''Defines how the pushbutton logic and how the door will react.
-    
+
     >>> int(PushbuttonLogic.openhold) == 0
     True
     >>> int(PushbuttonLogic.open) == 1

@@ -299,8 +299,10 @@ def main():
                         default=PushbuttonLogic.openhold.name,
                         choices=[x.name for x in PushbuttonLogic],
                         type=str)
-    parser.add_argument('-O', '--door-open-time', help="door open and close time when in 'normal' openclose mode", default=40, type=int)
-    parser.add_argument('-C', '--door-close-time', help="door close time when ending openhold mode", default=10, type=int)
+    parser.add_argument('-O', '--door-open-time',
+                        help="door open and close time when in 'normal' openclose mode", default=40, type=int)
+    parser.add_argument('-C', '--door-close-time',
+                        help="door close time when ending openhold mode", default=10, type=int)
     parser.add_argument('-L', '--lock-unlatch-time', help="lock unlatch time", default=4, type=int)
     parser.add_argument('-R', '--dryrun', help="dummy systemd installation", action='store_true')
     parser.add_argument('-V', '--verbose', help="be verbose", action='store_true')
