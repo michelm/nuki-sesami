@@ -164,6 +164,13 @@ class ElectricDoor:
     _state_changed: datetime.datetime
     '''Timestamp when the door state was last changed'''
 
+    _door_opened: bool
+    '''Flag indicating the door has (already) been opened. Prevents the open(hold) actions
+    being executed twice in case the unlatch timeout is reached first after which the lock 
+    still reaches the unlatched state.
+    Will be set when opening door and will be reset when door state is changed to closed.
+    '''
+
     _door_open_time: int
     '''The estimated time, in seconds, for the door to open and close'''
 
@@ -188,6 +195,7 @@ class ElectricDoor:
         self._openclose_mode = Relay(config.gpio_openclose_mode, False)
         self._state = DoorState.closed
         self._state_changed = datetime.datetime.now()
+        self._door_opened = False
         self._door_open_time = config.door_open_time
         self._door_close_time = config.door_close_time
         self._lock_unlatch_time = config.lock_unlatch_time
@@ -292,6 +300,8 @@ class ElectricDoor:
     def state(self, state: DoorState):
         if state == self._state:
             return
+        if state == DoorState.closed:        
+            self._door_opened = False
         self.logger.info("(state) %s -> %s", self._state.name, state.name)
         self._state = state
         self._state_changed = datetime.datetime.now()
@@ -376,6 +386,10 @@ class ElectricDoor:
     def on_lock_unlatched(self, trigger: DoorOpenTrigger) -> None:
         '''Opens the door if the lock is unlatched, or assumed to be unlatched.
         '''
+        if self._door_opened:
+            return 
+        self._door_opened = True
+
         if self.state == DoorState.openhold:
             self.openhold(trigger)
         else:
