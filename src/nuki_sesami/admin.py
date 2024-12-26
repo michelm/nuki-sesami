@@ -341,9 +341,6 @@ def main():
     logger.debug("gpio.openclose    : %s", args.gpio_openclose)
     logger.debug("dryrun            : %s", args.dryrun)
 
-    if "VIRTUAL_ENV" in os.environ:
-        logger.info("virtual environment detected, performing dummy installation")
-
     try:
         if args.action == "remove":
             services_remove(logger, prefix, args.dryrun)

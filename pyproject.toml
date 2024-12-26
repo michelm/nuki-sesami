@@ -4,23 +4,33 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nuki-sesami"
-version = "2.3.0"
+dynamic = ["version"]
+description = "Open an electric door using Nuki smartlock status"
+readme = "README.md"
+requires-python = ">= 3.11"
+license = "MIT"
+keywords = []
 authors = [
     { name = "Michel Mooij", email = "michel.mooij7@gmail.com" }
 ]
-description = "Open an electric door using Nuki smartlock status"
-readme = "README.md"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: POSIX :: Linux",
+  "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "aiomqtt>=2.1.0",
     "paho-mqtt>=2.0.0",
     "gpiozero>=2.0.1"
 ]
-requires-python = ">= 3.11"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
+
+[project.urls]
+"Documentation" = "https://github.com/michelm/nuki-sesami#readme"
+"Issues" = "https://github.com/michelm/nuki-sesami/issues"
+"Source" = "https://github.com/michelm/nuki-sesami"
 
 [project.scripts]
 nuki-sesami = "nuki_sesami.controller:main"
@@ -28,10 +38,54 @@ nuki-sesami-admin = "nuki_sesami.admin:main"
 nuki-sesami-bluez = "nuki_sesami.bluetooth:main"
 nuki-sesami-bluetest = "nuki_sesami.bluetooth_client:main"
 
-[project.urls]
-"Documentation" = "https://github.com/michelm/nuki-sesami#readme"
-"Source" = "https://github.com/michelm/nuki-sesami"
-"Issues" = "https://github.com/michelm/nuki-sesami/issues"
+[tool.hatch.version]
+path = "src/nuki_sesami/__about__.py"
+
+[tool.hatch.envs.default]
+dependencies = [
+  "coverage[toml]>=6.5",
+  "pytest",
+]
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "coverage run -m pytest {args:tests}"
+cov-report = [
+  "- coverage combine",
+  "coverage report",
+]
+cov = [
+  "test-cov",
+  "cov-report",
+]
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.11", "3.12"]
+
+[tool.hatch.envs.types]
+dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/nuki_sesami tests}"
+
+[tool.coverage.run]
+source_pkgs = ["nuki_sesami", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/nuki_sesami/__about__.py",
+]
+
+[tool.coverage.paths]
+nuki_sesami = ["src/nuki_sesami", "*/nuki-sesami/src/nuki_sesami"]
+tests = ["tests", "*/nuki-sesami/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
 
 [tool.ruff]
 target-version = "py311"

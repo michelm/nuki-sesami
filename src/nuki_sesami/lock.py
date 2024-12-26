@@ -3,6 +3,32 @@ from enum import IntEnum
 
 
 class NukiLockState(IntEnum):
+    """Current state of the lock.
+
+    >>> int(NukiLockState.uncalibrated) == 0
+    True
+    >>> int(NukiLockState.locked) == 1
+    True
+    >>> int(NukiLockState.unlocking) == 2
+    True
+    >>> int(NukiLockState.unlocked) == 3
+    True
+    >>> int(NukiLockState.locking) == 4
+    True
+    >>> int(NukiLockState.unlatched) == 5
+    True
+    >>> int(NukiLockState.unlocked2) == 6
+    True
+    >>> int(NukiLockState.unlatching) == 7
+    True
+    >>> int(NukiLockState.boot_run) == 253
+    True
+    >>> int(NukiLockState.motor_blocked) == 254
+    True
+    >>> int(NukiLockState.undefined) == 255
+    True
+    """
+
     uncalibrated = 0
     """The lock is uncalibrated and needs to be trained."""
     locked = 1
@@ -22,6 +48,26 @@ class NukiLockState(IntEnum):
 
 
 class NukiLockAction(IntEnum):
+    """Used for requesting the lock to change state.
+
+    >>> int(NukiLockAction.unlatch) == 1
+    True
+    >>> int(NukiLockAction.lock) == 2
+    True
+    >>> int(NukiLockAction.unlatch) == 3
+    True
+    >>> int(NukiLockAction.lock_and_go1) == 4
+    True
+    >>> int(NukiLockAction.lock_and_go2) == 5
+    True
+    >>> int(NukiLockAction.full_lock) == 6
+    True
+    >>> int(NukiLockAction.fob) == 80
+    True
+    >>> int(NukiLockAction.button) == 90
+    True
+    """
+
     unlock = 1
     """Request unlocked state; activates RTO."""
     lock = 2
@@ -40,6 +86,24 @@ class NukiLockAction(IntEnum):
 
 
 class NukiDoorsensorState(IntEnum):
+    """Current state of the door sensor.
+
+    >>> int(NukiDoorsensorState.door_closed) == 2
+    True
+    >>> int(NukiDoorsensorState.door_opened) == 3
+    True
+    >>> int(NukiDoorsensorState.door_state_unknown) == 4
+    True
+    >>> int(NukiDoorsensorState.calibrating) == 5
+    True
+    >>> int(NukiDoorsensorState.uncalibrated) == 16
+    True
+    >>> int(NukiDoorsensorState.tampered) == 240
+    True
+    >>> int(NukiDoorsensorState.unknown) == 255
+    True
+    """
+
     deactivated = 1
     """Door sensor is not used"""
     door_closed = 2
@@ -52,6 +116,24 @@ class NukiDoorsensorState(IntEnum):
 
 
 class NukiLockTrigger(IntEnum):
+    """Indicates the trigger of the lock action.
+
+    >>> int(NukiLockTrigger.system_bluetooth) == 0
+    True
+    >>> int(NukiLockTrigger.reserved) == 1
+    True
+    >>> int(NukiLockTrigger.button) == 2
+    True
+    >>> int(NukiLockTrigger.automatic) == 3
+    True
+    >>> int(NukiLockTrigger.autolock) == 6
+    True
+    >>> int(NukiLockTrigger.homekit) == 171
+    True
+    >>> int(NukiLockTrigger.mqtt) == 172
+    True
+    """
+
     system_bluetooth = 0
     reserved = 1
     button = 2
@@ -63,7 +145,22 @@ class NukiLockTrigger(IntEnum):
 
 
 class NukiLockActionEvent:
-    """Contains the last received lock action event from the Nuki smart lock."""
+    """Contains the last received lock action event from the Nuki smart lock.
+
+    >>> event = NukiLockActionEvent(
+    ...     NukiLockAction.unlatch, NukiLockTrigger.button, 1, 2, 3
+    ... )
+    >>> event.action == NukiLockAction.unlatch
+    True
+    >>> event.trigger == NukiLockTrigger.button
+    True
+    >>> event.auth_id == 1
+    True
+    >>> event.code_id == 2
+    True
+    >>> event.auto_unlock == 3
+    True
+    """
 
     action: NukiLockAction
     """Request lock action; e.g. unlatch"""
@@ -91,3 +188,9 @@ class NukiLockActionEvent:
         self.code_id = code_id
         self.auto_unlock = auto_unlock
         self.timestamp = datetime.datetime.now(tz=datetime.UTC)
+
+
+if __name__ == "__main__":
+    import doctest
+
+    doctest.testmod()
