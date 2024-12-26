@@ -20,7 +20,7 @@ from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 async def mqtt_publish_sesami_request_state(client, sesamibluez, state: DoorRequestState) -> None:
     device = sesamibluez.nuki_device
-    sesamibluez.logger.info('[mqtt] publish sesami/%s/request/state=%i', device, state.value)
+    sesamibluez.logger.info("[mqtt] publish sesami/%s/request/state=%i", device, state.value)
     await client.publish(f"sesami/{device}/request/state", state.value)
 
 
@@ -31,12 +31,13 @@ async def bluetooth_publish_sesami_status(sesamibluez, interval: int = 3) -> Non
 
 
 class SesamiBluetoothAgent(asyncio.Protocol):
-    '''Acts as broker between smartphones via bluetooth and the nuki-sesami
+    """Acts as broker between smartphones via bluetooth and the nuki-sesami
     eletrical door opener via mqtt.
 
     Subscribes as client to MQTT eletrical door opener topics from 'Nuki Sesami'.
     Received door commands from smartphones are forwarded to the MQTT broker.
-    '''
+    """
+
     def __init__(self, logger: Logger, config: SesamiConfig, version: str):
         self._version = version
         self._logger = logger
@@ -48,22 +49,22 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self._relay_openclose = False
         self._relay_openhold = False
         self._relay_opendoor = False
-        self._clients = [] # list of connected bluetooth clients
+        self._clients = []  # list of connected bluetooth clients
         self._background_tasks = set()
 
     def connection_made(self, transport) -> None:
-        peername = transport.get_extra_info('peername')
-        self.logger.info('[bluez] client connected %s', peername)
+        peername = transport.get_extra_info("peername")
+        self.logger.info("[bluez] client connected %s", peername)
         self._clients.append(transport)
         self.publish_status(transport)
 
     def connection_lost(self, exc) -> None:
-        '''Remove the client(transport) from the list of clients'''
-        self.logger.info('[bluez] client disconnected %r', exc)
+        """Remove the client(transport) from the list of clients"""
+        self.logger.info("[bluez] client disconnected %r", exc)
         self._clients = [c for c in self._clients if not c.is_closing()]
 
     def run_coroutine(self, coroutine) -> None:
-        '''Wraps the coroutine into a task and schedules its execution.
+        """Wraps the coroutine into a task and schedules its execution.
 
         The task will be added to the set of background tasks.
         This creates a strong reference.
@@ -74,7 +75,7 @@ class SesamiBluetoothAgent(asyncio.Protocol):
 
         When called from a thread running outside of the event loop context
         it is scheduled using asyncio.run_coroutine_threadsafe
-        '''
+        """
         task = asyncio.create_task(coroutine)
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
@@ -89,52 +90,41 @@ class SesamiBluetoothAgent(asyncio.Protocol):
                 state = DoorRequestState(req["params"]["door_request_state"])
                 self.run_coroutine(mqtt_publish_sesami_request_state(self._mqtt, self, state))
         except json.decoder.JSONDecodeError:
-            self.logger.exception('[bluez] failed to process request(%s)', request)
+            self.logger.exception("[bluez] failed to process request(%s)", request)
 
     def data_received(self, data) -> None:
         msg = data.decode()
-        self.logger.debug('[bluez] data received: %r', msg)
-        for m in [s for s in msg.split('\n') if s]:
+        self.logger.debug("[bluez] data received: %r", msg)
+        for m in [s for s in msg.split("\n") if s]:
             self.process_request(m)
 
     def get_status(self) -> dict:
         return {
-            "nuki": {
-                "lock": self._nuki_lock.value,
-                "doorsensor": self._nuki_doorsensor.value
-            },
-            "door": {
-                "state": self._door_state.value,
-                "mode": self._door_mode.value
-            },
+            "nuki": {"lock": self._nuki_lock.value, "doorsensor": self._nuki_doorsensor.value},
+            "door": {"state": self._door_state.value, "mode": self._door_mode.value},
             "relay": {
                 "openclose": self._relay_openclose,
                 "openhold": self._relay_openhold,
-                "opendoor": self._relay_opendoor
+                "opendoor": self._relay_opendoor,
             },
-            "version": self._version
+            "version": self._version,
         }
 
     def get_jsonrpc_status_notification(self) -> str:
         status = self.get_status()
-        return json.dumps({
-            "jsonrpc": "2.0",
-            "method": "status",
-            "params": status
-        })
+        return json.dumps({"jsonrpc": "2.0", "method": "status", "params": status})
 
     def publish_status(self, transport: asyncio.BaseTransport | None = None) -> None:
-        '''Publish status to a specific or all smartphones.
-        '''
+        """Publish status to a specific or all smartphones."""
         msg = self.get_jsonrpc_status_notification()
 
         if transport:
             self.logger.debug("[bluez] publish_status(N)=%s", msg)
-            transport.write(str(msg + '\n').encode())
+            transport.write(str(msg + "\n").encode())
         elif self._clients:
             self.logger.debug("[bluez] publish_status(U%i)=%s", len(self._clients), msg)
             for client in self._clients:
-                client.write(str(msg + '\n').encode())
+                client.write(str(msg + "\n").encode())
 
     def activate(self, client: aiomqtt.Client) -> None:
         self._mqtt = client
@@ -216,7 +206,7 @@ async def mqtt_receiver(client: aiomqtt.Client, agent: SesamiBluetoothAgent) -> 
     async for msg in client.messages:
         payload = msg.payload.decode()
         topic = str(msg.topic)
-        agent.logger.info('[mqtt] receive %s=%s', topic, payload)
+        agent.logger.info("[mqtt] receive %s=%s", topic, payload)
         if topic == f"nuki/{agent.nuki_device}/state":
             agent.nuki_lock = NukiLockState(int(payload))
         elif topic == f"nuki/{agent.nuki_device}/doorsensorState":
@@ -240,8 +230,9 @@ async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
     sock.bind((config.bluetooth_macaddr, config.bluetooth_channel))
     blueserver = await loop.create_server(lambda: blueagent, sock=sock, backlog=config.bluetooth_backlog)
 
-    async with aiomqtt.Client(config.mqtt_host, port=config.mqtt_port,
-            username=config.mqtt_username, password=config.mqtt_password) as client:
+    async with aiomqtt.Client(
+        config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
+    ) as client:
         blueagent.activate(client)
         device = blueagent.nuki_device
         await client.subscribe(f"nuki/{device}/state")
@@ -259,36 +250,36 @@ async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        prog='nuki-sesami-bluez',
-        description='Receive door commands from smartphones via bluetooth and forwards these to sesami-nuki',
-        epilog='Belrog: you shall not pass!',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        prog="nuki-sesami-bluez",
+        description="Receive door commands from smartphones via bluetooth and forwards these to sesami-nuki",
+        epilog="Belrog: you shall not pass!",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('-p', '--prefix',
-                        help="runtime system root; e.g. '~/.local' or '/'",
-                        type=str, default=None)
-    parser.add_argument('-c', '--cpath',
-                        help="configuration path; e.g. '/etc/nuki-sesami' or '~/.config/nuki-sesami'",
-                        type=str, default=None)
-    parser.add_argument('-V', '--verbose',
-                        help="be verbose", action='store_true')
-    parser.add_argument('-v', '--version',
-                        help="print version and exit", action='store_true')
+    parser.add_argument("-p", "--prefix", help="runtime system root; e.g. '~/.local' or '/'", type=str, default=None)
+    parser.add_argument(
+        "-c",
+        "--cpath",
+        help="configuration path; e.g. '/etc/nuki-sesami' or '~/.config/nuki-sesami'",
+        type=str,
+        default=None,
+    )
+    parser.add_argument("-V", "--verbose", help="be verbose", action="store_true")
+    parser.add_argument("-v", "--version", help="print version and exit", action="store_true")
 
     args = parser.parse_args()
-    version = importlib.metadata.version('nuki-sesami')
+    version = importlib.metadata.version("nuki-sesami")
     if args.version:
-        print(version)
+        print(version)  # noqa: T201
         sys.exit(0)
 
     prefix = args.prefix or get_prefix()
     cpath = args.cpath or get_config_path()
-    logpath = os.path.join(prefix, 'var/log/nuki-sesami-bluez')
+    logpath = os.path.join(prefix, "var/log/nuki-sesami-bluez")
 
     if not os.path.exists(logpath):
         os.makedirs(logpath)
 
-    logger = getlogger('nuki-sesami-bluez', logpath, level=logging.DEBUG if args.verbose else logging.INFO)
+    logger = getlogger("nuki-sesami-bluez", logpath, level=logging.DEBUG if args.verbose else logging.INFO)
     config = get_config(cpath)
 
     logger.info("version          : %s", version)
@@ -298,7 +289,7 @@ def main():
     logger.info("mqtt.host        : %s", config.mqtt_host)
     logger.info("mqtt.port        : %i", config.mqtt_port)
     logger.info("mqtt.username    : %s", config.mqtt_username)
-    logger.info("mqtt.password    : %s", '***')
+    logger.info("mqtt.password    : %s", "***")
     logger.info("bluetooth.macaddr: %s", config.bluetooth_macaddr)
     logger.info("bluetooth.channel: %i", config.bluetooth_channel)
     logger.info("bluetooth.backlog: %i", config.bluetooth_backlog)

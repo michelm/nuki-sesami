@@ -6,29 +6,29 @@ from nuki_sesami.state import PushbuttonLogic
 
 class SesamiConfig:
     def __init__(self, config: dict, auth: dict):
-        nuki = config['nuki']
-        self._nuki_device = nuki['device']
+        nuki = config["nuki"]
+        self._nuki_device = nuki["device"]
 
-        mqtt = config['mqtt']
-        self._mqtt_host = mqtt['host']
-        self._mqtt_port = mqtt['port']
-        self._mqtt_username = auth['username']
-        self._mqtt_password = auth['password']
+        mqtt = config["mqtt"]
+        self._mqtt_host = mqtt["host"]
+        self._mqtt_port = mqtt["port"]
+        self._mqtt_username = auth["username"]
+        self._mqtt_password = auth["password"]
 
-        bluetooth = config['bluetooth']
-        self._bluetooth_macaddr = bluetooth['macaddr']
-        self._bluetooth_channel = bluetooth['channel']
-        self._bluetooth_backlog = bluetooth['backlog'] if 'backlog' in bluetooth else 10
+        bluetooth = config["bluetooth"]
+        self._bluetooth_macaddr = bluetooth["macaddr"]
+        self._bluetooth_channel = bluetooth["channel"]
+        self._bluetooth_backlog = bluetooth["backlog"] if "backlog" in bluetooth else 10
 
-        gpio = config['gpio']
-        self._gpio_pushbutton = gpio['pushbutton']
-        self._gpio_opendoor = gpio['opendoor']
-        self._gpio_openhold_mode = gpio['openhold-mode']
-        self._gpio_openclose_mode = gpio['openclose-mode']
-        self._pushbutton = PushbuttonLogic[config['pushbutton']]
-        self._door_open_time = config['door-open-time'] if 'door-open-time' in config else 40
-        self._door_close_time = config['door-close-time'] if 'door-close-time' in config else 10
-        self._lock_unlatch_time = config['lock-unlatch-time'] if 'lock-unlatch-time' in config else 4
+        gpio = config["gpio"]
+        self._gpio_pushbutton = gpio["pushbutton"]
+        self._gpio_opendoor = gpio["opendoor"]
+        self._gpio_openhold_mode = gpio["openhold-mode"]
+        self._gpio_openclose_mode = gpio["openclose-mode"]
+        self._pushbutton = PushbuttonLogic[config["pushbutton"]]
+        self._door_open_time = config["door-open-time"] if "door-open-time" in config else 40
+        self._door_close_time = config["door-close-time"] if "door-close-time" in config else 10
+        self._lock_unlatch_time = config["lock-unlatch-time"] if "lock-unlatch-time" in config else 4
 
     @property
     def nuki_device(self) -> str:
@@ -96,19 +96,19 @@ class SesamiConfig:
 
 
 def get_config(prefix: str) -> SesamiConfig:
-    '''Returns a SesamiConfig instance for the given prefix.
+    """Returns a SesamiConfig instance for the given prefix.
 
     Arguments:
     * prefix: the prefix for the config file, e.g. '/etc/nuki-sesami'
 
     Returns:
     * config: SesamiConfig instance
-    '''
-    fname = os.path.join(prefix, 'config.json')
+    """
+    fname = os.path.join(prefix, "config.json")
     with open(fname) as f:
         config = json.load(f)
 
-    fname = os.path.join(prefix, 'auth.json')
+    fname = os.path.join(prefix, "auth.json")
     with open(fname) as f:
         auth = json.load(f)
 

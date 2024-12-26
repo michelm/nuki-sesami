@@ -4,8 +4,8 @@ import os
 
 class SesamiClient:
     def __init__(self, client: dict):
-        self._macaddr = client['macaddr']
-        self._pubkey = client['pubkey']
+        self._macaddr = client["macaddr"]
+        self._pubkey = client["pubkey"]
 
     @property
     def macaddr(self) -> str:
@@ -17,7 +17,7 @@ class SesamiClient:
 
 
 def get_clients(prefix: str) -> list[SesamiClient]:
-    fname = os.path.join(prefix, 'clients.json')
+    fname = os.path.join(prefix, "clients.json")
     with open(fname) as f:
         clients = json.load(f)
     return [SesamiClient(client) for client in clients]

@@ -29,5 +29,14 @@ nuki-sesami-bluez = "nuki_sesami.bluetooth:main"
 nuki-sesami-bluetest = "nuki_sesami.bluetooth_client:main"
 
 [project.urls]
-"Homepage" = "https://github.com/michelm/nuki-sesami"
+"Documentation" = "https://github.com/michelm/nuki-sesami#readme"
+"Source" = "https://github.com/michelm/nuki-sesami"
 "Issues" = "https://github.com/michelm/nuki-sesami/issues"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+ignore = [
+  # Allow boolean positional values in function calls, like `dict.get(... True)`
+  "FBT001", "FBT002",
+]
