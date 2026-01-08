@@ -18,24 +18,73 @@ from nuki_sesami.state import DoorMode, DoorRequestState, DoorState
 from nuki_sesami.util import get_config_path, get_prefix, getlogger
 
 
-async def mqtt_publish_sesami_request_state(client, sesamibluez, state: DoorRequestState) -> None:
-    device = sesamibluez.nuki_device
-    sesamibluez.logger.info("[mqtt] publish sesami/%s/request/state=%i", device, state.value)
+async def mqtt_publish_sesami_request_state(client, agent, state: DoorRequestState) -> None:
+    device = agent.nuki_device
+    agent.logger.info("[mqtt] publish sesami/%s/request/state=%i", device, state.value)
     await client.publish(f"sesami/{device}/request/state", state.value)
 
 
-async def bluetooth_publish_sesami_status(sesamibluez, interval: int = 3) -> None:
+async def bluetooth_publish_sesami_status(agent, interval: int = 3) -> None:
     while True:
         await asyncio.sleep(interval)
-        sesamibluez.publish_status()
+        agent.publish_status()
 
 
-class SesamiBluetoothAgent(asyncio.Protocol):
+class SesamiBluetoothProtocol(asyncio.Protocol):
+    """Handles an individual bluetooth connection with buffering."""
+
+    def __init__(self, agent: SesamiBluetoothAgent):
+        self._agent = agent
+        self._transport: asyncio.Transport | None = None
+        self._buffer = ""
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = transport  # type: ignore
+        peername = transport.get_extra_info("peername")
+        self._agent.logger.info("[bluez] client connected %s", peername)
+        self._agent.add_protocol(self)
+        self.send_status()
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        self._agent.logger.info("[bluez] client disconnected %r", exc)
+        self._agent.remove_protocol(self)
+
+    def data_received(self, data: bytes) -> None:
+        try:
+            self._buffer += data.decode()
+        except UnicodeDecodeError:
+            self._agent.logger.error("[bluez] failed to decode data: %r", data)
+            return
+
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.strip()
+            if line:
+                self._agent.logger.debug("[bluez] data received: %r", line)
+                self.process_request(line)
+
+    def process_request(self, request: str) -> None:
+        try:
+            req = json.loads(request)
+            if req.get("method") == "set" and "door_request_state" in req.get("params", {}):
+                state = DoorRequestState(req["params"]["door_request_state"])
+                self._agent.run_coroutine(mqtt_publish_sesami_request_state(self._agent.mqtt, self._agent, state))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            self._agent.logger.exception("[bluez] failed to process request(%s)", request)
+
+    def send_status(self) -> None:
+        if not self._transport or self._transport.is_closing():
+            return
+        msg = self._agent.get_jsonrpc_status_notification()
+        self._agent.logger.debug("[bluez] send_status=%s", msg)
+        self._transport.write(str(msg + "\n").encode())
+
+
+class SesamiBluetoothAgent:
     """Acts as broker between smartphones via bluetooth and the nuki-sesami
     eletrical door opener via mqtt.
 
-    Subscribes as client to MQTT eletrical door opener topics from 'Nuki Sesami'.
-    Received door commands from smartphones are forwarded to the MQTT broker.
+    Manages shared state across all connected bluetooth clients.
     """
 
     def __init__(self, logger: Logger, config: SesamiConfig, version: str):
@@ -49,54 +98,21 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         self._relay_openclose = False
         self._relay_openhold = False
         self._relay_opendoor = False
-        self._clients = []  # list of connected bluetooth clients
-        self._background_tasks = set()
+        self._protocols: list[SesamiBluetoothProtocol] = []
+        self._background_tasks: set[asyncio.Task] = set()
+        self._mqtt: aiomqtt.Client | None = None
 
-    def connection_made(self, transport) -> None:
-        peername = transport.get_extra_info("peername")
-        self.logger.info("[bluez] client connected %s", peername)
-        self._clients.append(transport)
-        self.publish_status(transport)
+    def add_protocol(self, protocol: SesamiBluetoothProtocol) -> None:
+        self._protocols.append(protocol)
 
-    def connection_lost(self, exc) -> None:
-        """Remove the client(transport) from the list of clients"""
-        self.logger.info("[bluez] client disconnected %r", exc)
-        self._clients = [c for c in self._clients if not c.is_closing()]
+    def remove_protocol(self, protocol: SesamiBluetoothProtocol) -> None:
+        if protocol in self._protocols:
+            self._protocols.remove(protocol)
 
     def run_coroutine(self, coroutine) -> None:
-        """Wraps the coroutine into a task and schedules its execution.
-
-        The task will be added to the set of background tasks.
-        This creates a strong reference.
-
-        To prevent keeping references to finished tasks forever,
-        the task removes its own reference from the set of background tasks
-        after completion.
-
-        When called from a thread running outside of the event loop context
-        it is scheduled using asyncio.run_coroutine_threadsafe
-        """
         task = asyncio.create_task(coroutine)
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
-
-    def process_request(self, request: str) -> None:
-        if not request:
-            return
-
-        try:
-            req = json.loads(request)
-            if req["method"] == "set" and "door_request_state" in req["params"]:
-                state = DoorRequestState(req["params"]["door_request_state"])
-                self.run_coroutine(mqtt_publish_sesami_request_state(self._mqtt, self, state))
-        except json.decoder.JSONDecodeError:
-            self.logger.exception("[bluez] failed to process request(%s)", request)
-
-    def data_received(self, data) -> None:
-        msg = data.decode()
-        self.logger.debug("[bluez] data received: %r", msg)
-        for m in [s for s in msg.split("\n") if s]:
-            self.process_request(m)
 
     def get_status(self) -> dict:
         return {
@@ -114,17 +130,10 @@ class SesamiBluetoothAgent(asyncio.Protocol):
         status = self.get_status()
         return json.dumps({"jsonrpc": "2.0", "method": "status", "params": status})
 
-    def publish_status(self, transport: asyncio.BaseTransport | None = None) -> None:
-        """Publish status to a specific or all smartphones."""
-        msg = self.get_jsonrpc_status_notification()
-
-        if transport:
-            self.logger.debug("[bluez] publish_status(N)=%s", msg)
-            transport.write(str(msg + "\n").encode())
-        elif self._clients:
-            self.logger.debug("[bluez] publish_status(U%i)=%s", len(self._clients), msg)
-            for client in self._clients:
-                client.write(str(msg + "\n").encode())
+    def publish_status(self) -> None:
+        """Publish status to all connected smartphones."""
+        for protocol in self._protocols:
+            protocol.send_status()
 
     def activate(self, client: aiomqtt.Client) -> None:
         self._mqtt = client
@@ -133,6 +142,12 @@ class SesamiBluetoothAgent(asyncio.Protocol):
     @property
     def logger(self) -> Logger:
         return self._logger
+
+    @property
+    def mqtt(self) -> aiomqtt.Client:
+        if self._mqtt is None:
+            raise RuntimeError("MQTT client not initialized")
+        return self._mqtt
 
     @property
     def nuki_device(self) -> str:
@@ -224,17 +239,17 @@ async def mqtt_receiver(client: aiomqtt.Client, agent: SesamiBluetoothAgent) -> 
 
 
 async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
-    blueagent = SesamiBluetoothAgent(logger, config, version)
+    agent = SesamiBluetoothAgent(logger, config, version)
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     sock.bind((config.bluetooth_macaddr, config.bluetooth_channel))
-    blueserver = await loop.create_server(lambda: blueagent, sock=sock, backlog=config.bluetooth_backlog)
+    blueserver = await loop.create_server(lambda: SesamiBluetoothProtocol(agent), sock=sock, backlog=config.bluetooth_backlog)
 
     async with aiomqtt.Client(
         config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
     ) as client:
-        blueagent.activate(client)
-        device = blueagent.nuki_device
+        agent.activate(client)
+        device = agent.nuki_device
         await client.subscribe(f"nuki/{device}/state")
         await client.subscribe(f"nuki/{device}/doorsensorState")
         await client.subscribe(f"sesami/{device}/state")
@@ -244,7 +259,7 @@ async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
         await client.subscribe(f"sesami/{device}/relay/opendoor")
 
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(mqtt_receiver(client, blueagent))
+            tg.create_task(mqtt_receiver(client, agent))
             tg.create_task(blueserver.serve_forever())
 
 
