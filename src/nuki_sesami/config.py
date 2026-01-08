@@ -1,98 +1,107 @@
+from __future__ import annotations
+
 import json
 import os
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from nuki_sesami.state import PushbuttonLogic
 
 
-class SesamiConfig:
-    def __init__(self, config: dict, auth: dict):
-        nuki = config["nuki"]
-        self._nuki_device = nuki["device"]
+class NukiConfig(BaseModel):
+    device: str
 
-        mqtt = config["mqtt"]
-        self._mqtt_host = mqtt["host"]
-        self._mqtt_port = mqtt["port"]
-        self._mqtt_username = auth["username"]
-        self._mqtt_password = auth["password"]
 
-        bluetooth = config["bluetooth"]
-        self._bluetooth_macaddr = bluetooth["macaddr"]
-        self._bluetooth_channel = bluetooth["channel"]
-        self._bluetooth_backlog = bluetooth["backlog"] if "backlog" in bluetooth else 10
+class MqttConfig(BaseModel):
+    host: str
+    port: int
+    username: str | None = None
+    password: str | None = None
 
-        gpio = config["gpio"]
-        self._gpio_pushbutton = gpio["pushbutton"]
-        self._gpio_opendoor = gpio["opendoor"]
-        self._gpio_openhold_mode = gpio["openhold-mode"]
-        self._gpio_openclose_mode = gpio["openclose-mode"]
-        self._pushbutton = PushbuttonLogic[config["pushbutton"]]
-        self._door_open_time = config["door-open-time"] if "door-open-time" in config else 40
-        self._door_close_time = config["door-close-time"] if "door-close-time" in config else 10
-        self._lock_unlatch_time = config["lock-unlatch-time"] if "lock-unlatch-time" in config else 4
+
+class BluetoothConfig(BaseModel):
+    macaddr: str
+    channel: int
+    backlog: int = 10
+
+
+class GpioConfig(BaseModel):
+    pushbutton: int
+    opendoor: int
+    openhold_mode: int = Field(alias="openhold-mode")
+    openclose_mode: int = Field(alias="openclose-mode")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SesamiConfig(BaseModel):
+    nuki: NukiConfig
+    mqtt: MqttConfig
+    bluetooth: BluetoothConfig
+    gpio: GpioConfig
+    pushbutton: PushbuttonLogic
+    door_open_time: int = Field(default=40, alias="door-open-time")
+    door_close_time: int = Field(default=10, alias="door-close-time")
+    lock_unlatch_time: int = Field(default=4, alias="lock-unlatch-time")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("pushbutton", mode="before")
+    @classmethod
+    def validate_pushbutton(cls, v: str | int) -> PushbuttonLogic:
+        if isinstance(v, str):
+            try:
+                return PushbuttonLogic[v]
+            except KeyError:
+                raise ValueError(f"Invalid pushbutton logic: {v}") from None
+        return PushbuttonLogic(v)
 
     @property
     def nuki_device(self) -> str:
-        return self._nuki_device
+        return self.nuki.device
 
     @property
     def mqtt_host(self) -> str:
-        return self._mqtt_host
+        return self.mqtt.host
 
     @property
     def mqtt_port(self) -> int:
-        return self._mqtt_port
+        return self.mqtt.port
 
     @property
-    def mqtt_username(self) -> str:
-        return self._mqtt_username
+    def mqtt_username(self) -> str | None:
+        return self.mqtt.username
 
     @property
-    def mqtt_password(self) -> str:
-        return self._mqtt_password
+    def mqtt_password(self) -> str | None:
+        return self.mqtt.password
 
     @property
     def bluetooth_macaddr(self) -> str:
-        return self._bluetooth_macaddr
+        return self.bluetooth.macaddr
 
     @property
     def bluetooth_channel(self) -> int:
-        return self._bluetooth_channel
+        return self.bluetooth.channel
 
     @property
     def bluetooth_backlog(self) -> int:
-        return self._bluetooth_backlog
+        return self.bluetooth.backlog
 
     @property
     def gpio_pushbutton(self) -> int:
-        return self._gpio_pushbutton
+        return self.gpio.pushbutton
 
     @property
     def gpio_opendoor(self) -> int:
-        return self._gpio_opendoor
+        return self.gpio.opendoor
 
     @property
     def gpio_openhold_mode(self) -> int:
-        return self._gpio_openhold_mode
+        return self.gpio.openhold_mode
 
     @property
     def gpio_openclose_mode(self) -> int:
-        return self._gpio_openclose_mode
-
-    @property
-    def pushbutton(self) -> PushbuttonLogic:
-        return self._pushbutton
-
-    @property
-    def door_open_time(self) -> int:
-        return self._door_open_time
-
-    @property
-    def door_close_time(self) -> int:
-        return self._door_close_time
-
-    @property
-    def lock_unlatch_time(self) -> int:
-        return self._lock_unlatch_time
+        return self.gpio.openclose_mode
 
 
 def get_config(prefix: str) -> SesamiConfig:
@@ -106,10 +115,13 @@ def get_config(prefix: str) -> SesamiConfig:
     """
     fname = os.path.join(prefix, "config.json")
     with open(fname) as f:
-        config = json.load(f)
+        config_dict = json.load(f)
 
     fname = os.path.join(prefix, "auth.json")
-    with open(fname) as f:
-        auth = json.load(f)
+    if os.path.exists(fname):
+        with open(fname) as f:
+            auth_dict = json.load(f)
+        config_dict["mqtt"]["username"] = auth_dict.get("username")
+        config_dict["mqtt"]["password"] = auth_dict.get("password")
 
-    return SesamiConfig(config, auth)
+    return SesamiConfig.model_validate(config_dict)

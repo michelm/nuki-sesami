@@ -24,7 +24,8 @@ classifiers = [
 dependencies = [
     "aiomqtt>=2.1.0",
     "paho-mqtt>=2.0.0",
-    "gpiozero>=2.0.1"
+    "gpiozero>=2.0.1",
+    "pydantic>=2.0.0"
 ]
 
 [project.urls]

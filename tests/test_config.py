@@ -27,12 +27,9 @@ def test_sesami_config():
         "lock-unlatch-time": 4,
     }
 
-    auth = {
-        "username": "mqttuser",
-        "password": "mqttpass",
-    }
-
-    sesami_config = SesamiConfig(config, auth)
+    config["mqtt"]["username"] = "mqttuser"
+    config["mqtt"]["password"] = "mqttpass"
+    sesami_config = SesamiConfig.model_validate(config)
 
     assert sesami_config.nuki_device == "12345678"
     assert sesami_config.mqtt_host == "mqtt.example.com"
