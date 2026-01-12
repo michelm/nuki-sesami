@@ -22,7 +22,7 @@ from gpiozero import Button, DigitalOutputDevice
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockActionEvent, NukiLockState, NukiLockTrigger
 from nuki_sesami.state import DoorMode, DoorOpenTrigger, DoorRequestState, DoorState, PushbuttonLogic
-from nuki_sesami.util import get_config_path, get_prefix, getlogger
+from nuki_sesami.util import get_config_path, get_prefix, getlogger, mqtt_retry_loop
 
 
 async def mqtt_publish_nuki_lock_action(
@@ -542,17 +542,21 @@ async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
     else:
         door = ElectricDoorPushbuttonOpenHold(logger, config, version)
 
-    async with aiomqtt.Client(
-        config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
-    ) as client:
-        loop = asyncio.get_running_loop()
-        door.activate(client, loop)
-        await client.subscribe(f"nuki/{door.nuki_device}/state")
-        await client.subscribe(f"nuki/{door.nuki_device}/lockAction")
-        await client.subscribe(f"nuki/{door.nuki_device}/lockActionEvent")
-        await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
-        await client.subscribe(f"sesami/{door.nuki_device}/request/state")
-        await mqtt_receiver(client, door)
+    async for attempt in mqtt_retry_loop(logger):
+        try:
+            async with aiomqtt.Client(
+                config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
+            ) as client:
+                loop = asyncio.get_running_loop()
+                door.activate(client, loop)
+                await client.subscribe(f"nuki/{door.nuki_device}/state")
+                await client.subscribe(f"nuki/{door.nuki_device}/lockAction")
+                await client.subscribe(f"nuki/{door.nuki_device}/lockActionEvent")
+                await client.subscribe(f"nuki/{door.nuki_device}/doorsensorState")
+                await client.subscribe(f"sesami/{door.nuki_device}/request/state")
+                await mqtt_receiver(client, door)
+        except aiomqtt.MqttError:
+            logger.error("mqtt connection failed (attempt %i)", attempt)
 
 
 def main():

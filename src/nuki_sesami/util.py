@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import subprocess
@@ -78,3 +79,16 @@ def get_config_path() -> str:
     if is_virtual_env():
         return os.path.join(sys.prefix, "etc", "nuki-sesami")
     return os.path.join(os.path.expanduser("~"), ".config", "nuki-sesami")
+
+async def mqtt_retry_loop(logger: Logger, interval: int = 5):
+    """Yields at start of each retry attempt.
+
+    Infinite loop that waits for a specified interval between attempts.
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        if attempt > 1:
+            logger.info("retry connection in %i seconds (attempt %i)", interval, attempt)
+            await asyncio.sleep(interval)
+        yield attempt

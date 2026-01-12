@@ -15,7 +15,7 @@ import aiomqtt
 from nuki_sesami.config import SesamiConfig, get_config
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockState
 from nuki_sesami.state import DoorMode, DoorRequestState, DoorState
-from nuki_sesami.util import get_config_path, get_prefix, getlogger
+from nuki_sesami.util import get_config_path, get_prefix, getlogger, mqtt_retry_loop
 
 
 async def mqtt_publish_sesami_request_state(client, agent, state: DoorRequestState) -> None:
@@ -245,22 +245,26 @@ async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
     sock.bind((config.bluetooth_macaddr, config.bluetooth_channel))
     blueserver = await loop.create_server(lambda: SesamiBluetoothProtocol(agent), sock=sock, backlog=config.bluetooth_backlog)
 
-    async with aiomqtt.Client(
-        config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
-    ) as client:
-        agent.activate(client)
-        device = agent.nuki_device
-        await client.subscribe(f"nuki/{device}/state")
-        await client.subscribe(f"nuki/{device}/doorsensorState")
-        await client.subscribe(f"sesami/{device}/state")
-        await client.subscribe(f"sesami/{device}/mode")
-        await client.subscribe(f"sesami/{device}/relay/openclose")
-        await client.subscribe(f"sesami/{device}/relay/openhold")
-        await client.subscribe(f"sesami/{device}/relay/opendoor")
+    async for attempt in mqtt_retry_loop(logger):
+        try:
+            async with aiomqtt.Client(
+                config.mqtt_host, port=config.mqtt_port, username=config.mqtt_username, password=config.mqtt_password
+            ) as client:
+                agent.activate(client)
+                device = agent.nuki_device
+                await client.subscribe(f"nuki/{device}/state")
+                await client.subscribe(f"nuki/{device}/doorsensorState")
+                await client.subscribe(f"sesami/{device}/state")
+                await client.subscribe(f"sesami/{device}/mode")
+                await client.subscribe(f"sesami/{device}/relay/openclose")
+                await client.subscribe(f"sesami/{device}/relay/openhold")
+                await client.subscribe(f"sesami/{device}/relay/opendoor")
 
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(mqtt_receiver(client, agent))
-            tg.create_task(blueserver.serve_forever())
+                async with asyncio.TaskGroup() as tg:
+                    tg.create_task(mqtt_receiver(client, agent))
+                    tg.create_task(blueserver.serve_forever())
+        except aiomqtt.MqttError:
+            logger.error("mqtt connection failed (attempt %i)", attempt)
 
 
 def main():
