@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from nuki_sesami.state import DoorState
 
 if TYPE_CHECKING:
-    from nuki_sesami.controller import ElectricDoor
+    from nuki_sesami.door import ElectricDoor
 
 
 class PushbuttonStrategy(ABC):
