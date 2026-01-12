@@ -15,6 +15,10 @@ import logging
 import os
 import sys
 from logging import Logger
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nuki_sesami.logic import PushbuttonStrategy
 
 import aiomqtt
 from gpiozero import Button, DigitalOutputDevice
@@ -185,7 +189,7 @@ class ElectricDoor:
     _lock_unlatch_time: int
     """The estimated time, in seconds, for the lock to move from locked or latched to unlatched"""
 
-    def __init__(self, logger: Logger, config: SesamiConfig, version: str):
+    def __init__(self, logger: Logger, config: SesamiConfig, version: str, strategy: PushbuttonStrategy):
         self._logger = logger
         self._version = version
         self._nuki_device = config.nuki_device
@@ -205,6 +209,7 @@ class ElectricDoor:
         self._door_close_time = config.door_close_time
         self._lock_unlatch_time = config.lock_unlatch_time
         self._background_tasks = set()
+        self._strategy = strategy
 
     def run_coroutine(self, coroutine) -> None:
         """Wraps the coroutine into a task and schedules its execution
@@ -450,68 +455,9 @@ class ElectricDoor:
             self.unlatch()  # open the door (and hold it open) once lock is unlatched
 
     def on_pushbutton_pressed(self) -> None:
-        self.logger.info("(%s.pushbutton_pressed)", self.classname)
+        self._strategy.on_pushbutton_pressed(self)
 
 
-class ElectricDoorPushbuttonOpenHold(ElectricDoor):
-    """Electric door with pushbutton 'open and hold' logic.
-
-    When pressing the pushbutton the door will be opened and held open until the pushbutton is pressed again.
-    """
-
-    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
-        super().__init__(logger, config, version)
-
-    def _next_door_state(self, state: DoorState) -> DoorState:
-        return DoorState.openhold if state == DoorState.closed else DoorState.closed
-
-    def on_pushbutton_pressed(self) -> None:
-        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
-        self.state = self._next_door_state(self.state)
-        if self.state == DoorState.openhold:
-            self.unlatch()  # open the door once lock is unlatched
-        else:
-            self.close()
-
-
-class ElectricDoorPushbuttonOpen(ElectricDoor):
-    """Electric door with pushbutton open logic.
-
-    When pressing the pushbutton the door will be opened for a few seconds after which it will be closed again.
-    """
-
-    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
-        super().__init__(logger, config, version)
-
-    def on_pushbutton_pressed(self) -> None:
-        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
-        self.state = DoorState.opened
-        self.unlatch()  # open the door once lock is unlatched
-
-
-class ElectricDoorPushbuttonToggle(ElectricDoor):
-    """Electric door with pushbutton toggle logic.
-
-    When pressing the pushbutton the door will open, if during the smart lock unlatching
-    phase of the pushbutton is pressed again the door will be held open until the pushbutton
-    is pressed again.
-    """
-
-    def __init__(self, logger: logging.Logger, config: SesamiConfig, version: str):
-        super().__init__(logger, config, version)
-
-    def _next_door_state(self, state: DoorState) -> DoorState:
-        return DoorState((state + 1) % len(DoorState))
-
-    def on_pushbutton_pressed(self) -> None:
-        self.logger.info("(%s.pushbutton_pressed) state=%s, lock=%s", self.classname, self.state.name, self.lock.name)
-        self.state = self._next_door_state(self.state)
-        if self.state == DoorState.closed:
-            self.unlatch()  # open the door once lock is unlatched
-        elif self.state == DoorState.opened:
-            self.close()
-        elif self.state == DoorState.openhold:
-            pass  # no action here
 
 
 async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor) -> None:
@@ -535,12 +481,16 @@ async def mqtt_receiver(client: aiomqtt.Client, door: ElectricDoor) -> None:
 
 
 async def activate(logger: Logger, config: SesamiConfig, version: str) -> None:
+    from nuki_sesami.logic import OpenHoldStrategy, OpenStrategy, ToggleStrategy
+
     if config.pushbutton == PushbuttonLogic.open:
-        door = ElectricDoorPushbuttonOpen(logger, config, version)
+        strategy = OpenStrategy()
     elif config.pushbutton == PushbuttonLogic.toggle:
-        door = ElectricDoorPushbuttonToggle(logger, config, version)
+        strategy = ToggleStrategy()
     else:
-        door = ElectricDoorPushbuttonOpenHold(logger, config, version)
+        strategy = OpenHoldStrategy()
+
+    door = ElectricDoor(logger, config, version, strategy)
 
     async for attempt in mqtt_retry_loop(logger):
         try:
