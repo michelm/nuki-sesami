@@ -16,10 +16,10 @@ Finally the door can be _opened_, _held open_ or _closed_ using the [_Nuki Sesam
 
 The following components are required when using this package:
 
-- [Nuki 3.0 Pro smart lock](https://nuki.io/en/smart-lock-pro/) (or similar)
-- **ERREKA Smart Evolution Pro** electric door controller (or similar)
-- [Raspberry Pi](https://www.raspberrypi.org/) (or similar) with [Raspbian BullsEye](https://www.raspbian.org/) (or later) installed
-- [Waveshare RPi relay board](https://www.waveshare.com/wiki/RPi_Relay_Board) (or similar)
+- [Nuki 3.0 Pro smart lock](https://nuki.io/en/smart-lock-pro/)
+- **ERREKA Smart Evolution Pro** electric door controller
+- [Raspberry Pi 3 Model B](https://www.raspberrypi.org/) with [Raspbian BullsEye|Bookworm|Trixie](https://www.raspbian.org/) installed
+- [Waveshare RPi relay board](https://www.waveshare.com/wiki/RPi_Relay_Board)
 - **mqtt** broker [mosquitto](https://mosquitto.org/), running on the same _Raspberry Pi_ board
 - Pushbutton connected to the relay board
 - Android (**v11+**) smartphone with the _Nuki Sesami_ app installed

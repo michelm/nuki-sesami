@@ -58,7 +58,23 @@ async def mqtt_publish_sesami_relay_opendoor_blink(client: aiomqtt.Client, devic
 
 
 async def timed_door_closed(door: ElectricDoor, open_time: float, close_time: float, check_interval: float = 3.0) -> None:
-    """Verifies and corrects the (logical) door state to closed when needed."""
+    """Verifies and corrects the (logical) door state to closed when needed.
+
+    Sometimes when opening the door, the door state is not updated to closed once the
+    door (physically) has closed since the door sensor has failed to detect it. In this case
+    this function will force the door state to closed after a configurable time.
+
+    Examples:
+    - When opening the door momentarily (open/close) we expect the door to be closed
+      again within 40 seconds.
+    - When ending the 'openhold' mode we expect the door to be closed within 10 seconds.
+
+    Arguments:
+    - door: The electric door instance
+    - open_time: The time (in [s]) needed to open and close the door
+    - close_time: The time (in [s]) needed to close the door when ending openhold mode
+    - check_interval: The check interval (in [s]) for the door state
+    """
     while True:
         await asyncio.sleep(check_interval)
         dt = datetime.datetime.now(tz=datetime.UTC) - door.state_changed_time
@@ -73,7 +89,14 @@ async def timed_door_closed(door: ElectricDoor, open_time: float, close_time: fl
 
 
 async def timed_lock_unlatched(door: ElectricDoor, unlatch_time: float = 4.0) -> None:
-    """Verifies the lock unlatches when instructed."""
+    """Verifies the lock unlatches; i.e. changes state to unlatched, when it is
+    instructed to do so. Triggers the door to open in case the lock is still unlatching
+    after the unlatch time(out) has been reached.
+
+    Arguments:
+    - door: The electric door instance
+    - unlatch_time: The time (in [s]) to wait before checking the lock is unlatched
+    """
     await asyncio.sleep(unlatch_time)
     if door.lock != NukiLockState.unlatching:
         return
@@ -98,7 +121,11 @@ def pushbutton_pressed(button: PushButton) -> None:
 
 
 class ElectricDoor:
-    """Opens an electric door based on the Nuki smart lock state."""
+    """Opens an electric door based on the Nuki smart lock state.
+
+    Subscribes as client to MQTT door status topic from 'Nuki 3.0 pro' smart lock. When the lock has been opened
+    it will activate a relay, e.g. using the 'RPi Relay Board', triggering the electric door to open.
+    """
 
     def __init__(self, logger: Logger, config: SesamiConfig, version: str, strategy: PushbuttonStrategy):
         self._logger = logger
@@ -125,7 +152,18 @@ class ElectricDoor:
         self._loop = None
 
     def run_coroutine(self, coroutine) -> None:
-        """Wraps the coroutine into a task and schedules its execution."""
+        """Wraps the coroutine into a task and schedules its execution
+
+        The task will be added to the set of background tasks.
+        This creates a strong reference.
+
+        To prevent keeping references to finished tasks forever,
+        the task removes its own reference from the set of background tasks
+        after completion.
+
+        When called from a thread running outside of the event loop context
+        it is scheduled using asyncio.run_coroutine_threadsafe
+        """
         try:
             _ = asyncio.get_running_loop()
             task = asyncio.create_task(coroutine)
@@ -136,7 +174,13 @@ class ElectricDoor:
                 asyncio.run_coroutine_threadsafe(coroutine, self._loop)
 
     def activate(self, client: aiomqtt.Client, loop: asyncio.AbstractEventLoop) -> None:
-        """Activates the electric door logic."""
+        """Activates the electric door logic.
+
+        Initializes GPIO to pins to default state, publishes initial (relay) states
+        and modes on MQTT.
+        Reset latched requests, if any, to 'unlatch' the lock; this may force the
+        lock from its full lock; e.g. when (re)starting this service during night hours.
+        """
         self._mqtt = client
         self._loop = loop
         self.logger.info("(relay) opendoor(0), openhold(0), openclose(1)")
@@ -288,6 +332,26 @@ class ElectricDoor:
             self.state = DoorState.opened
 
     def on_door_request(self, request: DoorRequestState) -> None:
+        """Process a requested door state received from the MQTT broker.
+
+        The Door request state is used to open/close the door and/or hold the door
+        open based on the current door state and mode.
+
+        Request processing logic:
+        - open
+            * if door is closed then open the door
+            * if door is in openhold mode then ignore the request
+        - close:
+            * if door is in openhold mode then close the door
+        - openhold:
+            * if door is not open then open it and keep it open
+            * ignore request if already in openhold mode
+        - none:
+            * ignore request
+
+        Arguments:
+        - request: the requested door state
+        """
         self.logger.info("(door_request) state=%s, lock=%s, request=%s", self.state.name, self.lock.name, request.name)
         if request == DoorRequestState.none:
             return

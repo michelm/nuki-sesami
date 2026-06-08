@@ -17,7 +17,7 @@ class DoorState(IntEnum):
     opened = 1
     """Door is open or opening"""
     openhold = 2
-    """Door is open or openning and will be held open"""
+    """Door is open or opening and will be held open"""
 
 
 class DoorOpenTrigger(IntEnum):
@@ -36,7 +36,7 @@ class DoorOpenTrigger(IntEnum):
 
 
 class DoorMode(IntEnum):
-    """Current operating mode of the doorcontroller.
+    """Current operating mode of the door controller.
 
     >>> int(DoorMode.openclose) == 0
     True
@@ -47,7 +47,7 @@ class DoorMode(IntEnum):
     openclose = 0
     """Open the door for a brief moment and then close it again"""
     openhold = 1
-    """Open the door and hold it open untill this mode ends"""
+    """Open the door and hold it open until this mode ends"""
 
 
 class DoorRequestState(IntEnum):
@@ -74,7 +74,7 @@ class DoorRequestState(IntEnum):
 
 
 class PushbuttonLogic(IntEnum):
-    """Defines how the pushbutton logic and how the door will react.
+    """Defines the pushbutton logic and how the door will react to it.
 
     >>> int(PushbuttonLogic.openhold) == 0
     True
