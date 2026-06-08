@@ -11,7 +11,7 @@ from gpiozero import Button, DigitalOutputDevice
 
 from nuki_sesami.config import SesamiConfig
 from nuki_sesami.lock import NukiDoorsensorState, NukiLockAction, NukiLockActionEvent, NukiLockState, NukiLockTrigger
-from nuki_sesami.state import DoorMode, DoorOpenTrigger, DoorState
+from nuki_sesami.state import DoorMode, DoorOpenTrigger, DoorRequestState, DoorState
 
 if TYPE_CHECKING:
     from nuki_sesami.logic import PushbuttonStrategy
